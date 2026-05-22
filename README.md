@@ -19,8 +19,10 @@ Swagger: `http://127.0.0.1:8000/api/docs`
 ### Rodar testes
 
 ```bash
-uv run pytest/ou na própria aba 'Tests' do VSCode
+uv run pytest
 ```
+
+Você também pode rodar os testes pela aba `Tests` do VSCode.
 
 Os testes devem focar nas regras de negócio em `services/`.
 Não criaremos testes de endpoints.
