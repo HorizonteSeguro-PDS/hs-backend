@@ -1,5 +1,6 @@
-A = ["Hello world"]
+from fastapi import FastAPI
+from main import app
 
 
-def test_hello_world():
-    assert A[0] == "Hello world"
+def test_app_is_fastapi_instance():
+    assert isinstance(app, FastAPI)
