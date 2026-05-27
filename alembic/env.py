@@ -6,7 +6,7 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 
 import domain.models  # noqa: F401
-from utils.database import Base, DATABASE_URL
+from utils.database import Base, get_database_url
 
 config = context.config
 
@@ -16,10 +16,15 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def get_alembic_database_url() -> str:
+    """Return the Alembic database URL."""
+    return get_database_url(config.get_main_option("sqlalchemy.url"))
+
+
 def run_migrations_offline() -> None:
     """Run migrations without opening a database connection."""
     context.configure(
-        url=DATABASE_URL,
+        url=get_alembic_database_url(),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -31,7 +36,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     """Run migrations with a live database connection."""
-    connectable = create_engine(DATABASE_URL, poolclass=pool.NullPool)
+    connectable = create_engine(get_alembic_database_url(), poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
