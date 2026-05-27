@@ -8,6 +8,17 @@
 uv sync
 ```
 
+### Configurar variaveis de ambiente
+
+```bash
+cp .env.example .env
+set -a
+source .env
+set +a
+```
+
+Execute esses comandos no mesmo terminal antes de rodar o projeto ou comandos do Alembic.
+
 ### Rodar o projeto
 
 ```bash
