@@ -16,20 +16,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    crisis_status = postgresql.ENUM(
-        "active",
-        "closed",
-        name="crisis_status",
-    )
-    crisis_type = postgresql.ENUM(
-        "flood",
-        "fire",
-        "landslide",
-        "other",
-        name="crisis_type",
-    )
-    crisis_status.create(op.get_bind(), checkfirst=True)
-    crisis_type.create(op.get_bind(), checkfirst=True)
+    op.execute("CREATE TYPE crisis_status AS ENUM ('active', 'closed')")
+    op.execute("CREATE TYPE crisis_type AS ENUM ('flood', 'fire', 'landslide', 'other')")
 
     op.create_table(
         "crises",
@@ -96,5 +84,5 @@ def downgrade() -> None:
     op.drop_index("ix_crises_state_city", table_name="crises")
     op.drop_table("crises")
 
-    postgresql.ENUM(name="crisis_type", create_type=False).drop(op.get_bind(), checkfirst=True)
-    postgresql.ENUM(name="crisis_status", create_type=False).drop(op.get_bind(), checkfirst=True)
+    op.execute("DROP TYPE IF EXISTS crisis_type")
+    op.execute("DROP TYPE IF EXISTS crisis_status")
