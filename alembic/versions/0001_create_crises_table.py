@@ -16,9 +16,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE TYPE crisis_status AS ENUM ('active', 'closed')")
-    op.execute("CREATE TYPE crisis_type AS ENUM ('flood', 'fire', 'landslide', 'other')")
-
     op.create_table(
         "crises",
         sa.Column(
@@ -30,13 +27,13 @@ def upgrade() -> None:
         sa.Column("name", sa.VARCHAR(), nullable=False),
         sa.Column(
             "type",
-            sa.Enum("flood", "fire", "landslide", "other", name="crisis_type", create_type=False),
+            sa.Enum("flood", "fire", "landslide", "other", name="crisis_type"),
             nullable=False,
         ),
         sa.Column("description", sa.TEXT(), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("active", "closed", name="crisis_status", create_type=False),
+            sa.Enum("active", "closed", name="crisis_status"),
             nullable=False,
             server_default=sa.text("'active'::crisis_status"),
         ),
