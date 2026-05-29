@@ -1,9 +1,19 @@
 """Alembic migration environment."""
 
+import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import create_engine, pool
+
+# Auto-load .env se existir; variáveis já definidas no shell têm precedência.
+_env_path = Path(__file__).parent.parent / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text().splitlines():
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip())
 
 import domain.models  # noqa: F401
 from utils.database import Base, get_database_url
