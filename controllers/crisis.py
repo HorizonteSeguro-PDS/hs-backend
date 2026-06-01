@@ -17,7 +17,9 @@ from services.audit_service import audit_event
 
 router = APIRouter(prefix="/crises", tags=["crises"])
 
-_ReadDep = Annotated[CurrentUser, Depends(require_role("master", "standard", "oversight"))]
+_ReadDep = Annotated[
+    CurrentUser, Depends(require_role("master", "standard", "oversight"))
+]
 _WriteDep = Annotated[CurrentUser, Depends(require_role("master", "standard"))]
 _SessionDep = Annotated[Session, Depends(get_session)]
 
@@ -66,7 +68,11 @@ def list_crises(
     return list(session.scalars(stmt))
 
 
-@router.get("/{crisis_id}", response_model=CrisisRead, responses={404: {"description": "crisis not found"}})
+@router.get(
+    "/{crisis_id}",
+    response_model=CrisisRead,
+    responses={404: {"description": "crisis not found"}},
+)
 def get_crisis(
     crisis_id: UUID,
     session: _SessionDep,
@@ -78,7 +84,11 @@ def get_crisis(
     return crisis
 
 
-@router.patch("/{crisis_id}", response_model=CrisisRead, responses={404: {"description": "crisis not found"}})
+@router.patch(
+    "/{crisis_id}",
+    response_model=CrisisRead,
+    responses={404: {"description": "crisis not found"}},
+)
 def update_crisis(
     crisis_id: UUID,
     payload: CrisisUpdate,
@@ -107,7 +117,14 @@ def update_crisis(
     return crisis
 
 
-@router.post("/{crisis_id}/close", response_model=CrisisRead, responses={404: {"description": "crisis not found"}, 409: {"description": "crisis already closed"}})
+@router.post(
+    "/{crisis_id}/close",
+    response_model=CrisisRead,
+    responses={
+        404: {"description": "crisis not found"},
+        409: {"description": "crisis already closed"},
+    },
+)
 def close_crisis(
     crisis_id: UUID,
     payload: CrisisClose,
@@ -139,7 +156,14 @@ def close_crisis(
     return crisis
 
 
-@router.post("/{crisis_id}/reopen", response_model=CrisisRead, responses={404: {"description": "crisis not found"}, 409: {"description": "crisis already active"}})
+@router.post(
+    "/{crisis_id}/reopen",
+    response_model=CrisisRead,
+    responses={
+        404: {"description": "crisis not found"},
+        409: {"description": "crisis already active"},
+    },
+)
 def reopen_crisis(
     crisis_id: UUID,
     session: _SessionDep,
