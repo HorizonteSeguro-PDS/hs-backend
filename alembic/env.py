@@ -15,8 +15,8 @@ if _env_path.exists():
             _k, _, _v = _line.partition("=")
             os.environ.setdefault(_k.strip(), _v.strip())
 
-import domain.models  # noqa: F401
-from utils.database import Base, get_database_url
+import domain.models  # noqa: E402, F401
+from utils.database import Base, get_database_url  # noqa: E402
 
 config = context.config
 
