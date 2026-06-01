@@ -9,6 +9,26 @@ jobs:
     name: Lint & Test
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+psycopg://test_user:test_password@localhost:5432/test_db
+      TEST_DATABASE_URL: postgresql+psycopg://test_user:test_password@localhost:5432/test_db
+      JWT_SECRET: ci-test-secret-do-not-use-in-prod
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
