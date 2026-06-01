@@ -60,6 +60,13 @@ Esse comando agrupa a validacao de lint e a checagem de formatacao usadas no CI.
 
 ---
 
+## Diagramas do banco de dados
+
+- [dbdiagram.io](https://dbdiagram.io/d/Horizonte-Seguro-6a163ae8dfb20dafcdfde4a9)
+- [Mermaid](https://mermaid.ai/app/projects/7f9b78b4-8374-4209-aeef-bca7fe69d046/diagrams/a0d50ddb-a1b8-4cff-afb2-f12521b6a51a/share/invite/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkb2N1bWVudElEIjoiYTBkNTBkZGItYTFiOC00Y2ZmLWFmYjItZjEyNTIxYjZhNTFhIiwiYWNjZXNzIjoiVmlldyIsImlhdCI6MTc4MDI4NzQ0OH0.6fe66SMJ2O34NLmnou4zxRc4Zh_xDaY0G5u0H323xYM?entryPoint=share-modal)
+
+---
+
 ## Crisis Foundation (PHS-48)
 
 ### Endpoints
