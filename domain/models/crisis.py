@@ -16,8 +16,18 @@ from sqlalchemy.orm import Mapped, mapped_column
 from domain.crisis.enums import CrisisStatus, CrisisType
 from utils.database import Base
 
-crisis_type_pg = PgEnum(CrisisType, name="crisis_type", create_type=False)
-crisis_status_pg = PgEnum(CrisisStatus, name="crisis_status", create_type=False)
+crisis_type_pg = PgEnum(
+    CrisisType,
+    name="crisis_type",
+    create_type=False,
+    values_callable=lambda obj: [e.value for e in obj],
+)
+crisis_status_pg = PgEnum(
+    CrisisStatus,
+    name="crisis_status",
+    create_type=False,
+    values_callable=lambda obj: [e.value for e in obj],
+)
 
 
 class Crisis(Base):
@@ -58,7 +68,9 @@ class Crisis(Base):
         TIMESTAMP(timezone=True), nullable=True
     )
     # TODO: add FK to users(id) once users table exists
-    closed_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    closed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
