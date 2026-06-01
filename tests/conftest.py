@@ -43,14 +43,13 @@ def clean_tables(db_engine):
         pytest.skip("DATABASE_URL not set — skipping DB integration tests")
     with db_engine.connect() as conn:
         conn.execute(text("TRUNCATE crises, audit_log RESTART IDENTITY CASCADE"))
-        conn.commit()
-
 
 @pytest.fixture(scope="session")
 def client(db_engine):
     if db_engine is None:
         pytest.skip("DATABASE_URL not set — skipping DB integration tests")
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
 
 
 @pytest.fixture(scope="session")
