@@ -25,7 +25,7 @@ def db_engine():
         yield None
         return
     try:
-        engine = create_engine(url)
+        engine = create_engine(url, connect_args={"connect_timeout": 10})
         cfg = Config("alembic.ini")
         cfg.set_main_option("sqlalchemy.url", url)
         command.upgrade(cfg, "head")
