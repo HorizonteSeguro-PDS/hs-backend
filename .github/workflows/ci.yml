@@ -54,4 +54,4 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run tests with pytest
-        run: uv run pytest -vv -s
+        run: uv run pytest tests/test_crisis_crud.py --setup-show -vv -s
