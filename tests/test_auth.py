@@ -3,6 +3,7 @@
 import os
 from uuid import uuid4
 
+import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from jose import jwt
