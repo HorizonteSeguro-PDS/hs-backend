@@ -124,7 +124,10 @@ class TestListCrises:
         assert response.json() == []
 
     def test_returns_crises(self):
-        crises = [_make_crisis(), _make_crisis(name="Incêndio BA", type=CrisisType.FIRE)]
+        crises = [
+            _make_crisis(),
+            _make_crisis(name="Incêndio BA", type=CrisisType.FIRE),
+        ]
         app.dependency_overrides[get_session] = _session_returning(crises)
         response = TestClient(app).get("/crises", headers=auth_headers("master"))
         assert response.status_code == 200
