@@ -44,6 +44,7 @@ def clean_tables(db_engine):
     with db_engine.connect() as conn:
         conn.execute(text("TRUNCATE crises, audit_log RESTART IDENTITY CASCADE"))
 
+
 @pytest.fixture(scope="session")
 def client(db_engine):
     if db_engine is None:
