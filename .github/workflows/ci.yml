@@ -9,24 +9,7 @@ jobs:
     name: Lint & Test
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: test_user
-          POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: test_db
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd="pg_isready -U test_user -d test_db"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
     env:
-      DATABASE_URL: postgresql+psycopg://test_user:test_password@localhost:5432/test_db
-      TEST_DATABASE_URL: postgresql+psycopg://test_user:test_password@localhost:5432/test_db
       JWT_SECRET: ci-test-secret-do-not-use-in-prod
 
     steps:
@@ -44,9 +27,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Run migrations
-        run: uv run alembic upgrade head
-
       - name: Lint with ruff
         run: uv run ruff check .
 
@@ -54,4 +34,4 @@ jobs:
         run: uv run ruff format --check .
 
       - name: Run tests with pytest
-        run: uv run pytest tests/test_crisis_crud.py --setup-show -vv -s
+        run: uv run pytest
