@@ -1,9 +1,6 @@
-"""Tests for JWT decode and RBAC using the real get_current_user (no stubs)."""
-
 import os
 from uuid import uuid4
 
-import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 from jose import jwt
