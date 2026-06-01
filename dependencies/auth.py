@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -12,7 +13,7 @@ __all__ = ["CurrentUser", "get_current_user", "require_role"]
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
 ) -> CurrentUser:
     if credentials is None:
         raise HTTPException(
@@ -39,7 +40,9 @@ def require_role(*allowed_roles: str) -> Callable:
         def create(user=Depends(require_role("master", "standard")), ...): ...
     """
 
-    def dependency(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    def dependency(
+        user: Annotated[CurrentUser, Depends(get_current_user)],
+    ) -> CurrentUser:
         if user.role not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
