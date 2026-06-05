@@ -30,10 +30,10 @@ Swagger: `http://127.0.0.1:8000/api/docs`
 ### Rodar testes
 
 ```bash
-TEST_DATABASE_URL=postgresql+psycopg://user:pass@localhost:5432/test_db uv run pytest
+uv run pytest
 ```
 
-Os testes de unidade (RBAC, JWT) não precisam de banco. Os testes de integração do CRUD precisam de `TEST_DATABASE_URL` apontando para um PostgreSQL real — o conftest roda as migrations automaticamente.
+A suíte atual (RBAC, JWT e CRUD) roda totalmente mockada — não precisa de banco nem de variáveis de ambiente, exatamente como no CI. Testes de integração com PostgreSQL real (usando `TEST_DATABASE_URL`) ficam para uma etapa futura.
 
 ### Rodar lint
 
@@ -107,4 +107,4 @@ Copie um dos JWTs impressos pelo seeder e cole no botão **Authorize** do Swagge
 |----------|-----------|
 | `DATABASE_URL` | URL do banco PostgreSQL principal |
 | `JWT_SECRET` | Segredo para assinar/verificar JWTs (HS256) |
-| `TEST_DATABASE_URL` | URL do banco usado nos testes de integração |
+| `TEST_DATABASE_URL` | _(opcional, uso futuro)_ URL do banco para os testes de integração — ainda não utilizada pela suíte atual |
