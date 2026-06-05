@@ -1,11 +1,18 @@
 """Database configuration shared by the app and Alembic."""
 
 import os
+from pathlib import Path
 from typing import Any
 
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+# Auto-load .env se existir; variáveis já definidas no shell têm precedência.
+from dotenv import load_dotenv
+
+_env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(_env_path, override=False)
+
+from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy.engine import Engine  # noqa: E402
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker  # noqa: E402
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 

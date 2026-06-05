@@ -8,13 +8,17 @@ dependencies = [
     "alembic>=1.18.0,<2.0.0",
     "fastapi[standard]==0.135.3",
     "psycopg[binary]>=3,<4",
+    "python-dotenv>=1.2.2",
+    "python-jose[cryptography]>=3.3.0,<4",
     "sqlalchemy>=2.0,<3.0",
     "uvicorn>=0.47.0",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28",
     "pytest==9.0.2",
+    "pytest-dotenv>=0.5.2",
     "ruff==0.15.9",
 ]
 
