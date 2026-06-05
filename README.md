@@ -33,10 +33,7 @@ Swagger: `http://127.0.0.1:8000/api/docs`
 uv run pytest
 ```
 
-Você também pode rodar os testes pela aba `Tests` do VSCode.
-
-Os testes devem focar nas regras de negócio em `services/`.
-Não criaremos testes de endpoints.
+A suíte atual (RBAC, JWT e CRUD) roda totalmente mockada — não precisa de banco nem de variáveis de ambiente, exatamente como no CI. Testes de integração com PostgreSQL real (usando `TEST_DATABASE_URL`) ficam para uma etapa futura.
 
 ### Rodar lint
 
@@ -45,6 +42,8 @@ uv run ruff check . && uv run ruff format --check .
 ```
 
 Esse comando agrupa a validacao de lint e a checagem de formatacao usadas no CI.
+
+---
 
 ## Estrutura do projeto
 
@@ -55,5 +54,57 @@ Esse comando agrupa a validacao de lint e a checagem de formatacao usadas no CI.
 - `domain/models/`: contem os models SQLAlchemy que representam as tabelas.
 - `domain/schemas/`: contem os schemas Pydantic de entrada e saida da API.
 - `domain/errors/`: contem excecoes e erros especificos do dominio.
+- `dependencies/`: injeção de dependência para sessão de banco e autenticação.
 - `schedules/`: contem jobs e tarefas periodicas.
 - `utils/`: contem funcoes auxiliares reutilizaveis.
+
+---
+
+## Diagramas do banco de dados
+
+- [dbdiagram.io](https://dbdiagram.io/d/Horizonte-Seguro-6a163ae8dfb20dafcdfde4a9)
+- [Mermaid](https://mermaid.ai/app/projects/7f9b78b4-8374-4209-aeef-bca7fe69d046/diagrams/a0d50ddb-a1b8-4cff-afb2-f12521b6a51a/share/invite/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJkb2N1bWVudElEIjoiYTBkNTBkZGItYTFiOC00Y2ZmLWFmYjItZjEyNTIxYjZhNTFhIiwiYWNjZXNzIjoiVmlldyIsImlhdCI6MTc4MDI4NzQ0OH0.6fe66SMJ2O34NLmnou4zxRc4Zh_xDaY0G5u0H323xYM?entryPoint=share-modal)
+
+---
+
+## Crisis Foundation (PHS-48)
+
+### Endpoints
+
+| Método | Rota | Roles | Descrição |
+|--------|------|-------|-----------|
+| `POST` | `/crises` | master, standard | Cria uma nova crise |
+| `GET` | `/crises` | master, standard, oversight | Lista crises (paginada, filtrável) |
+| `GET` | `/crises/{id}` | master, standard, oversight | Detalha uma crise |
+| `PATCH` | `/crises/{id}` | master, standard | Atualiza campos da crise |
+| `POST` | `/crises/{id}/close` | master, standard | Fecha uma crise |
+| `POST` | `/crises/{id}/reopen` | master, standard | Reabre uma crise fechada |
+
+**Query params de listagem:** `limit` (1–200, default 50), `offset` (default 0), `status`, `state`, `type`.
+
+### Roles
+
+| Role | Acesso |
+|------|--------|
+| `master` | Acesso total — criação, edição, fechar, reabrir |
+| `standard` | Operação do dia a dia — igual ao master nesta versão |
+| `oversight` | Somente leitura — listagem e detalhamento |
+
+### Subir o ambiente
+
+```bash
+alembic upgrade head
+python -m scripts.seed   # insere 5 crises e imprime 3 JWTs de teste
+```
+
+Copie um dos JWTs impressos pelo seeder e cole no botão **Authorize** do Swagger (`/api/docs`).
+
+> **Atenção:** o seeder não é idempotente — rode apenas uma vez por banco limpo.
+
+### Variáveis de ambiente necessárias
+
+| Variável | Descrição |
+|----------|-----------|
+| `DATABASE_URL` | URL do banco PostgreSQL principal |
+| `JWT_SECRET` | Segredo para assinar/verificar JWTs (HS256) |
+| `TEST_DATABASE_URL` | _(opcional, uso futuro)_ URL do banco para os testes de integração — ainda não utilizada pela suíte atual |
