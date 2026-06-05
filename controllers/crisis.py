@@ -109,7 +109,7 @@ def update_crisis(
         entity_id=crisis.id,
         action=AuditAction.UPDATE.value,
         author_id=user.id,
-        payload=updates,
+        payload=payload.model_dump(mode="json", exclude_none=True),
     )
 
     session.commit()
