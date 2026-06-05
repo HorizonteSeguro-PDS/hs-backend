@@ -1,12 +1,18 @@
 """Alembic migration environment."""
 
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, pool
 
-import domain.models  # noqa: F401
-from utils.database import Base, get_database_url
+# Auto-load .env se existir; variáveis já definidas no shell têm precedência.
+_env_path = Path(__file__).parent.parent / ".env"
+load_dotenv(_env_path, override=False)
+
+import domain.models  # noqa: E402, F401
+from utils.database import Base, get_database_url  # noqa: E402
 
 config = context.config
 
