@@ -44,9 +44,12 @@ def require_role(*allowed_roles: str) -> Callable:
         user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> CurrentUser:
         if user.role not in allowed_roles:
+            # user.role is normally a Role enum; render its value (e.g. "master")
+            # instead of "Role.MASTER". Fall back gracefully if it's a plain str.
+            role_label = getattr(user.role, "value", user.role)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"role '{user.role}' not authorized for this operation",
+                detail=f"role '{role_label}' not authorized for this operation",
             )
         return user
 
