@@ -5,12 +5,10 @@ from pathlib import Path
 from typing import Any
 
 # Auto-load .env se existir; variáveis já definidas no shell têm precedência.
+from dotenv import load_dotenv
+
 _env_path = Path(__file__).parent.parent / ".env"
-if _env_path.exists():
-    for _line in _env_path.read_text().splitlines():
-        if _line and not _line.startswith("#") and "=" in _line:
-            _k, _, _v = _line.partition("=")
-            os.environ.setdefault(_k.strip(), _v.strip())
+load_dotenv(_env_path, override=False)
 
 from sqlalchemy import create_engine  # noqa: E402
 from sqlalchemy.engine import Engine  # noqa: E402

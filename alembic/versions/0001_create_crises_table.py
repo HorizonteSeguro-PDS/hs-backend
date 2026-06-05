@@ -16,6 +16,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # gen_random_uuid() vem do core no PostgreSQL 13+, mas em versões
+    # anteriores depende da extensão pgcrypto. Garante a função em qualquer caso.
+    op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+
     op.create_table(
         "crises",
         sa.Column(
