@@ -193,11 +193,21 @@ new_enums = (
 
 def upgrade() -> None:
     with op.get_context().autocommit_block():
-        op.execute("ALTER TYPE crisis_type ADD VALUE IF NOT EXISTS 'drought' AFTER 'landslide'")
-        op.execute("ALTER TYPE crisis_type ADD VALUE IF NOT EXISTS 'storm' AFTER 'drought'")
-        op.execute("ALTER TYPE crisis_type ADD VALUE IF NOT EXISTS 'epidemic' AFTER 'storm'")
-        op.execute("ALTER TYPE crisis_status ADD VALUE IF NOT EXISTS 'draft' BEFORE 'active'")
-        op.execute("ALTER TYPE crisis_status ADD VALUE IF NOT EXISTS 'archived' AFTER 'closed'")
+        op.execute(
+            "ALTER TYPE crisis_type ADD VALUE IF NOT EXISTS 'drought' AFTER 'landslide'"
+        )
+        op.execute(
+            "ALTER TYPE crisis_type ADD VALUE IF NOT EXISTS 'storm' AFTER 'drought'"
+        )
+        op.execute(
+            "ALTER TYPE crisis_type ADD VALUE IF NOT EXISTS 'epidemic' AFTER 'storm'"
+        )
+        op.execute(
+            "ALTER TYPE crisis_status ADD VALUE IF NOT EXISTS 'draft' BEFORE 'active'"
+        )
+        op.execute(
+            "ALTER TYPE crisis_status ADD VALUE IF NOT EXISTS 'archived' AFTER 'closed'"
+        )
 
     bind = op.get_bind()
 
@@ -214,7 +224,9 @@ def upgrade() -> None:
         ),
         sa.Column("name", sa.VARCHAR(), nullable=False),
         sa.Column("scope", role_scope, nullable=False),
-        sa.Column("permissions", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "permissions", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
     )
 
     op.create_table(
@@ -700,9 +712,7 @@ def downgrade() -> None:
         "USING entity_type::text"
     )
     op.execute(
-        "ALTER TABLE audit_log "
-        "ALTER COLUMN action TYPE VARCHAR "
-        "USING action::text"
+        "ALTER TABLE audit_log ALTER COLUMN action TYPE VARCHAR USING action::text"
     )
 
     op.drop_index("ix_notifications_created_at", table_name="notifications")
@@ -767,9 +777,7 @@ def downgrade() -> None:
         type_="foreignkey",
     )
     op.execute(
-        "ALTER TABLE crises "
-        "ALTER COLUMN state TYPE VARCHAR(2) "
-        "USING state::text"
+        "ALTER TABLE crises ALTER COLUMN state TYPE VARCHAR(2) USING state::text"
     )
     op.drop_column("crises", "organization_id")
 
