@@ -1,5 +1,6 @@
 """Pydantic schemas package."""
 
+from domain.schemas.base import BaseSchema
 from domain.schemas.enums import (
     AuditAction,
     AuditEntityType,
@@ -80,6 +81,7 @@ __all__ = [
     "AuditLogCreate",
     "AuditLogRead",
     "AuditLogUpdate",
+    "BaseSchema",
     "BeneficiaryBase",
     "BeneficiaryCreate",
     "BeneficiaryRead",

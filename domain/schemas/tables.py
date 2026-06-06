@@ -2,8 +2,9 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
+from domain.schemas.base import BaseSchema
 from domain.schemas.enums import (
     AuditAction,
     AuditEntityType,
@@ -40,9 +41,7 @@ class RoleUpdate(BaseModel):
     permissions: dict[str, Any] | None = None
 
 
-class RoleRead(RoleBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class RoleRead(RoleBase, BaseSchema):
     id: UUID
 
 
@@ -64,9 +63,7 @@ class OrganizationUpdate(BaseModel):
     contact_email: str | None = None
 
 
-class OrganizationRead(OrganizationBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class OrganizationRead(OrganizationBase, BaseSchema):
     id: UUID
     created_at: datetime
 
@@ -94,9 +91,7 @@ class UserUpdate(BaseModel):
     last_login_at: datetime | None = None
 
 
-class UserRead(UserBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class UserRead(UserBase, BaseSchema):
     id: UUID
     created_at: datetime
     last_login_at: datetime | None = None
@@ -140,9 +135,7 @@ class CrisisUpdate(BaseModel):
     close_reason: str | None = None
 
 
-class CrisisRead(CrisisBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class CrisisRead(CrisisBase, BaseSchema):
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -186,9 +179,7 @@ class ShelterUpdate(BaseModel):
     verified: bool | None = None
 
 
-class ShelterRead(ShelterBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class ShelterRead(ShelterBase, BaseSchema):
     id: UUID
     created_at: datetime
     updated_at: datetime
@@ -216,9 +207,7 @@ class BeneficiaryUpdate(BaseModel):
     checked_out_at: datetime | None = None
 
 
-class BeneficiaryRead(BeneficiaryBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class BeneficiaryRead(BeneficiaryBase, BaseSchema):
     id: UUID
     checked_in_at: datetime
 
@@ -239,9 +228,7 @@ class ResourceCategoryUpdate(BaseModel):
     description: str | None = None
 
 
-class ResourceCategoryRead(ResourceCategoryBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class ResourceCategoryRead(ResourceCategoryBase, BaseSchema):
     id: UUID
 
 
@@ -265,9 +252,7 @@ class ShelterNeedUpdate(BaseModel):
     status: ShelterNeedStatus | None = None
 
 
-class ShelterNeedRead(ShelterNeedBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class ShelterNeedRead(ShelterNeedBase, BaseSchema):
     id: UUID
     declared_at: datetime
     updated_at: datetime
@@ -289,9 +274,7 @@ class InventoryItemUpdate(BaseModel):
     quantity_current: int | None = None
 
 
-class InventoryItemRead(InventoryItemBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class InventoryItemRead(InventoryItemBase, BaseSchema):
     id: UUID
     updated_at: datetime
 
@@ -320,9 +303,7 @@ class DonationUpdate(BaseModel):
     received_at: datetime | None = None
 
 
-class DonationRead(DonationBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class DonationRead(DonationBase, BaseSchema):
     id: UUID
     pledged_at: datetime
 
@@ -355,9 +336,7 @@ class DistributionUpdate(BaseModel):
     delivered_at: datetime | None = None
 
 
-class DistributionRead(DistributionBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class DistributionRead(DistributionBase, BaseSchema):
     id: UUID
 
 
@@ -379,9 +358,7 @@ class NotificationUpdate(BaseModel):
     read: bool | None = None
 
 
-class NotificationRead(NotificationBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class NotificationRead(NotificationBase, BaseSchema):
     id: UUID
     created_at: datetime
 
@@ -406,8 +383,6 @@ class AuditLogUpdate(BaseModel):
     payload: dict[str, Any] | None = None
 
 
-class AuditLogRead(AuditLogBase):
-    model_config = ConfigDict(from_attributes=True)
-
+class AuditLogRead(AuditLogBase, BaseSchema):
     id: UUID
     created_at: datetime
