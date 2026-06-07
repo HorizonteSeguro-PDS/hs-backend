@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from dependencies.auth import CurrentUser, require_role
 from dependencies.session import get_session
-from domain.models.shelter import Shelter
 from domain.shelter.schemas import (
     ShelterCreateRequest,
     ShelterListItemResponse,
