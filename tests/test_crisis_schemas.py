@@ -25,6 +25,7 @@ def test_crisis_list_item_response_is_limited_to_listing_fields():
         created_at=_NOW,
         updated_at=_NOW,
         close_reason="Nao deve aparecer",
+        shelters_count=2,
     )
 
     response = CrisisListItemResponse.model_validate(crisis)
@@ -40,9 +41,11 @@ def test_crisis_list_item_response_is_limited_to_listing_fields():
         "severity_initial",
         "severity_calculated",
         "created_at",
+        "shelters_count",
     }
     assert "created_by" not in payload
     assert "close_reason" not in payload
+    assert payload["shelters_count"] == 2
 
 
 def test_crisis_detail_response_uses_shelter_summary_without_recursion():

@@ -38,6 +38,7 @@ def _make_crisis(**kwargs) -> Crisis:
     c.id = kwargs.get("id", uuid.uuid4())
     c.created_at = kwargs.get("created_at", _NOW)
     c.updated_at = kwargs.get("updated_at", _NOW)
+    c.shelters_count = kwargs.get("shelters_count", 0)
     return c
 
 
@@ -52,6 +53,7 @@ def _session_for_create():
                 obj.id = uuid.uuid4()
                 obj.created_at = _NOW
                 obj.updated_at = _NOW
+                obj.shelters_count = 0
                 if obj.status is None:
                     obj.status = CrisisStatus.ACTIVE
 
@@ -144,6 +146,7 @@ class TestListCrises:
         assert body["page"] == 1
         assert body["size"] == 10
         assert body["pages"] == 1
+        assert body["items"][0]["shelters_count"] == 0
         assert "created_by" not in body["items"][0]
         assert "close_reason" not in body["items"][0]
 

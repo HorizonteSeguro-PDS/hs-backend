@@ -69,6 +69,7 @@ class CrisisListItemResponse(BaseModel):
     severity_initial: int | None = None
     severity_calculated: int | None = None
     created_at: datetime
+    shelters_count: int = Field(ge=0)
 
 
 class CrisisDetailResponse(CrisisRead):
