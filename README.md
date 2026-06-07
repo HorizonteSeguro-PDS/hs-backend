@@ -38,10 +38,10 @@ A suíte atual (RBAC, JWT e CRUD) roda totalmente mockada — não precisa de ba
 ### Rodar lint
 
 ```bash
-uv run ruff check . && uv run ruff format --check .
+uv run ruff check . && uv run ruff format .
 ```
 
-Esse comando agrupa a validacao de lint e a checagem de formatacao usadas no CI.
+Esse comando agrupa a validacao de lint e aplica a formatacao.
 
 ---
 

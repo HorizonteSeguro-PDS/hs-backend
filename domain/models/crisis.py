@@ -12,8 +12,11 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import relationship
 
 from domain.crisis.enums import CrisisStatus, CrisisType
+from domain.models.crises_shelters import CrisesShelters
+from domain.models.shelter import Shelter
 from domain.schemas.enums import BrazilianState
 from utils.database import Base
 
@@ -82,6 +85,10 @@ class Crisis(Base):
         UUID(as_uuid=True), nullable=True
     )
     close_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shelters: Mapped[list[Shelter]] = relationship(
+        secondary=CrisesShelters.__table__,
+        back_populates="crises",
+    )
 
     __table_args__ = (
         CheckConstraint(

@@ -8,23 +8,26 @@ from sqlalchemy.exc import OperationalError
 
 from controllers.auth import router as auth_router
 from controllers.crisis import router as crisis_router
+from controllers.shelter import router as shelter_router
 from controllers.user import router as user_router
 
 # Piggyback on uvicorn's configured error logger — `hs-backend` would have no
 # handler attached and the message would silently drop on the floor.
 logger = logging.getLogger("uvicorn.error")
+DOCS_URL = "/api/docs"
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    logging.getLogger("uvicorn.error").info("Swagger UI: /api/docs")
+    logging.getLogger("uvicorn.error").info("Swagger UI: %s", DOCS_URL)
     yield
 
 
-app = FastAPI(title="hs-backend", docs_url="/api/docs", lifespan=lifespan)
+app = FastAPI(title="hs-backend", docs_url=DOCS_URL, lifespan=lifespan)
 
 app.include_router(auth_router)
 app.include_router(crisis_router)
+app.include_router(shelter_router)
 app.include_router(user_router)
 
 
