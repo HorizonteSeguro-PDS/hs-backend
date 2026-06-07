@@ -50,7 +50,9 @@ class ShelterService(BaseService[Shelter]):
         )
         return self.create(shelter)
 
-    def update_shelter(self, shelter_id: UUID, payload: ShelterUpdateRequest) -> Shelter:
+    def update_shelter(
+        self, shelter_id: UUID, payload: ShelterUpdateRequest
+    ) -> Shelter:
         return self.update(shelter_id, payload.model_dump(exclude_unset=True))
 
     def delete_shelter(self, shelter_id: UUID) -> None:
