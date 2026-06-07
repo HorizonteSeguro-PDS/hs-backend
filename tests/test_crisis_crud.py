@@ -61,11 +61,12 @@ def _session_for_create():
     return override
 
 
-def _session_returning(crises: list):
+def _session_returning(crises: list, total: int | None = None):
     """Session mock whose scalars() returns an iterable (controller uses list())."""
 
     def override():
         mock = MagicMock()
+        mock.scalar.return_value = len(crises) if total is None else total
         mock.scalars.return_value = crises
         yield mock
 
@@ -121,7 +122,13 @@ class TestListCrises:
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get("/crises", headers=auth_headers("sheltered"))
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "size": 10,
+            "pages": 0,
+        }
 
     def test_returns_crises(self):
         crises = [
@@ -131,7 +138,28 @@ class TestListCrises:
         app.dependency_overrides[get_session] = _session_returning(crises)
         response = TestClient(app).get("/crises", headers=auth_headers("dev"))
         assert response.status_code == 200
-        assert len(response.json()) == 2
+        body = response.json()
+        assert len(body["items"]) == 2
+        assert body["total"] == 2
+        assert body["page"] == 1
+        assert body["size"] == 10
+        assert body["pages"] == 1
+        assert "created_by" not in body["items"][0]
+        assert "close_reason" not in body["items"][0]
+
+    def test_uses_requested_page_and_size(self):
+        crises = [_make_crisis(name="Incêndio BA", type=CrisisType.FIRE)]
+        app.dependency_overrides[get_session] = _session_returning(crises, total=2)
+        response = TestClient(app).get(
+            "/crises?page=2&size=1", headers=auth_headers("dev")
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["items"]) == 1
+        assert body["total"] == 2
+        assert body["page"] == 2
+        assert body["size"] == 1
+        assert body["pages"] == 2
 
     def test_filter_by_status_param_accepted(self):
         app.dependency_overrides[get_session] = _session_returning([])
@@ -144,6 +172,27 @@ class TestListCrises:
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get(
             "/crises?state=SP", headers=auth_headers("sheltered")
+        )
+        assert response.status_code == 200
+
+    def test_page_must_start_at_one(self):
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get(
+            "/crises?page=0", headers=auth_headers("sheltered")
+        )
+        assert response.status_code == 422
+
+    def test_size_has_max_limit(self):
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get(
+            "/crises?size=101", headers=auth_headers("sheltered")
+        )
+        assert response.status_code == 422
+
+    def test_size_max_limit_is_accepted(self):
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get(
+            "/crises?size=100", headers=auth_headers("sheltered")
         )
         assert response.status_code == 200
 

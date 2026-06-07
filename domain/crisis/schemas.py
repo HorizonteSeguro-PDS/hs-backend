@@ -54,3 +54,17 @@ class CrisisRead(BaseModel):
     closed_at: datetime | None = None
     closed_by: UUID | None = None
     close_reason: str | None = None
+
+
+class CrisisListItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    type: CrisisType
+    status: CrisisStatus
+    state: str
+    city: str
+    severity_initial: int | None = None
+    severity_calculated: int | None = None
+    created_at: datetime

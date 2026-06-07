@@ -3,15 +3,22 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from dependencies.auth import CurrentUser, require_role
 from dependencies.session import get_session
 from domain.audit.enums import AuditAction, AuditEntityType
 from domain.crisis.enums import CrisisStatus, CrisisType
-from domain.crisis.schemas import CrisisClose, CrisisCreate, CrisisRead, CrisisUpdate
+from domain.crisis.schemas import (
+    CrisisClose,
+    CrisisCreate,
+    CrisisListItemResponse,
+    CrisisRead,
+    CrisisUpdate,
+)
 from domain.models.crisis import Crisis
+from schemas.pagination import Page, PaginationParams, pagination_params
 from services.audit_service import audit_event
 
 
@@ -26,6 +33,7 @@ _ReadDep = Annotated[
 ]
 _WriteDep = Annotated[CurrentUser, Depends(require_role("dev", "crisis_manager"))]
 _SessionDep = Annotated[Session, Depends(get_session)]
+_PaginationDep = Annotated[PaginationParams, Depends(pagination_params)]
 
 
 @router.post("", response_model=CrisisRead, status_code=status.HTTP_201_CREATED)
@@ -52,24 +60,34 @@ def create_crisis(
     return crisis
 
 
-@router.get("", response_model=list[CrisisRead])
+@router.get("", response_model=Page[CrisisListItemResponse])
 def list_crises(
     session: _SessionDep,
     _user: _ReadDep,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    pagination: _PaginationDep,
     status: Annotated[CrisisStatus | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
     type: Annotated[CrisisType | None, Query()] = None,
-) -> list[Crisis]:
-    stmt = select(Crisis).order_by(Crisis.created_at.desc()).limit(limit).offset(offset)
+) -> Page[CrisisListItemResponse]:
+    stmt = select(Crisis).order_by(Crisis.created_at.desc())
+    count_stmt = select(func.count()).select_from(Crisis)
     if status is not None:
         stmt = stmt.where(Crisis.status == status)
+        count_stmt = count_stmt.where(Crisis.status == status)
     if state is not None:
         stmt = stmt.where(Crisis.state == state)
+        count_stmt = count_stmt.where(Crisis.state == state)
     if type is not None:
         stmt = stmt.where(Crisis.type == type)
-    return list(session.scalars(stmt))
+        count_stmt = count_stmt.where(Crisis.type == type)
+
+    total = session.scalar(count_stmt) or 0
+    items = list(session.scalars(stmt.limit(pagination.limit).offset(pagination.offset)))
+    return Page[CrisisListItemResponse].create(
+        items=items,
+        total=total,
+        params=pagination,
+    )
 
 
 @router.get(
