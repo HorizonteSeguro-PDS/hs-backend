@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
+import controllers.crisis as crisis_controller
 from dependencies.session import get_session
 from domain.crisis.enums import CrisisStatus, CrisisType
 from domain.models.crisis import Crisis
@@ -64,23 +65,26 @@ def _session_for_create():
 
 
 def _session_returning(crises: list, total: int | None = None):
-    """Session mock whose scalars() returns an iterable (controller uses list())."""
+    """Session mock for CrisisRepository.list_paginated()."""
 
     def override():
         mock = MagicMock()
         mock.scalar.return_value = len(crises) if total is None else total
-        mock.scalars.return_value = crises
+        mock.execute.return_value.all.return_value = [
+            (crisis, getattr(crisis, "shelters_count", 0)) for crisis in crises
+        ]
         yield mock
 
     return override
 
 
 def _session_get(crisis):
-    """Session mock whose get() returns the given object (or None)."""
+    """Session mock for CrisisRepository.get_with_shelters()."""
 
     def override():
         mock = MagicMock()
         mock.get.return_value = crisis
+        mock.scalar.return_value = crisis
         yield mock
 
     return override
@@ -177,6 +181,38 @@ class TestListCrises:
             "/crises?state=SP", headers=auth_headers("sheltered")
         )
         assert response.status_code == 200
+
+    def test_filter_by_type_param_is_forwarded_to_service(self, monkeypatch):
+        captured = {}
+
+        class FakeCrisisService:
+            def __init__(self, repository):
+                self.repository = repository
+
+            def list_crises(
+                self,
+                params,
+                *,
+                status=None,
+                state=None,
+                type_=None,
+            ):
+                captured["type_"] = type_
+                return {
+                    "items": [],
+                    "total": 0,
+                    "page": params.page,
+                    "size": params.size,
+                    "pages": 0,
+                }
+
+        monkeypatch.setattr(crisis_controller, "CrisisService", FakeCrisisService)
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get(
+            "/crises?type=flood", headers=auth_headers("sheltered")
+        )
+        assert response.status_code == 200
+        assert captured["type_"] == CrisisType.FLOOD
 
     def test_page_must_start_at_one(self):
         app.dependency_overrides[get_session] = _session_returning([])

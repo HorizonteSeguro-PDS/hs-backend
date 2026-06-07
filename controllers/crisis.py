@@ -3,7 +3,6 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from dependencies.auth import CurrentUser, require_role
@@ -13,13 +12,16 @@ from domain.crisis.enums import CrisisStatus, CrisisType
 from domain.crisis.schemas import (
     CrisisClose,
     CrisisCreate,
+    CrisisDetailResponse,
     CrisisListItemResponse,
     CrisisRead,
     CrisisUpdate,
 )
 from domain.models.crisis import Crisis
+from repositories import CrisisRepository
 from schemas.pagination import Page, PaginationParams, pagination_params
 from services.audit_service import audit_event
+from services.crisis import CrisisService
 
 
 router = APIRouter(prefix="/crises", tags=["crises"])
@@ -67,43 +69,29 @@ def list_crises(
     pagination: _PaginationDep,
     status: Annotated[CrisisStatus | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
-    type: Annotated[CrisisType | None, Query()] = None,
+    type_: Annotated[CrisisType | None, Query(alias="type")] = None,
 ) -> Page[CrisisListItemResponse]:
-    stmt = select(Crisis).order_by(Crisis.created_at.desc())
-    count_stmt = select(func.count()).select_from(Crisis)
-    if status is not None:
-        stmt = stmt.where(Crisis.status == status)
-        count_stmt = count_stmt.where(Crisis.status == status)
-    if state is not None:
-        stmt = stmt.where(Crisis.state == state)
-        count_stmt = count_stmt.where(Crisis.state == state)
-    if type is not None:
-        stmt = stmt.where(Crisis.type == type)
-        count_stmt = count_stmt.where(Crisis.type == type)
-
-    total = session.scalar(count_stmt) or 0
-    items = list(session.scalars(stmt.limit(pagination.limit).offset(pagination.offset)))
-    return Page[CrisisListItemResponse].create(
-        items=items,
-        total=total,
-        params=pagination,
+    service = CrisisService(CrisisRepository(session))
+    return service.list_crises(
+        pagination,
+        status=status,
+        state=state,
+        type_=type_,
     )
 
 
 @router.get(
     "/{crisis_id}",
-    response_model=CrisisRead,
+    response_model=CrisisDetailResponse,
     responses={404: {"description": "crisis not found"}},
 )
 def get_crisis(
     crisis_id: UUID,
     session: _SessionDep,
     _user: _ReadDep,
-) -> Crisis:
-    crisis = session.get(Crisis, crisis_id)
-    if not crisis:
-        raise HTTPException(status_code=404, detail="crisis not found")
-    return crisis
+) -> CrisisDetailResponse:
+    service = CrisisService(CrisisRepository(session))
+    return service.get_crisis_detail(crisis_id)
 
 
 @router.patch(
