@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from domain.crisis.enums import CrisisStatus, CrisisType
+from domain.schemas.enums import BrazilianState
 from utils.database import Base
 
 crisis_type_pg = PgEnum(
@@ -25,6 +26,15 @@ crisis_type_pg = PgEnum(
 crisis_status_pg = PgEnum(
     CrisisStatus,
     name="crisis_status",
+    create_type=False,
+    values_callable=lambda obj: [e.value for e in obj],
+)
+# Migration 0003 changed crises.state from VARCHAR(2) to the brazilian_state
+# native Postgres enum. The model has to match — otherwise SQLAlchemy sends
+# a VARCHAR param on INSERT and Postgres rejects with ProgrammingError.
+brazilian_state_pg = PgEnum(
+    BrazilianState,
+    name="brazilian_state",
     create_type=False,
     values_callable=lambda obj: [e.value for e in obj],
 )
@@ -46,7 +56,7 @@ class Crisis(Base):
         nullable=False,
         server_default="active",
     )
-    state: Mapped[str] = mapped_column(VARCHAR(2), nullable=False)
+    state: Mapped[BrazilianState] = mapped_column(brazilian_state_pg, nullable=False)
     city: Mapped[str] = mapped_column(VARCHAR, nullable=False)
     severity_initial: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     severity_calculated: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
