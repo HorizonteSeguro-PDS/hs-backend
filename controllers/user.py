@@ -1,4 +1,5 @@
-"""User management endpoints. Gated by Role.MASTER."""
+"""User management endpoints. Role-gated per the permissions matrix in
+`services.auth_service.can_create_roles`."""
 
 from typing import Annotated
 
@@ -6,18 +7,22 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from dependencies.auth import CurrentUser, require_role
+from dependencies.auth import CurrentUser, get_current_user
 from dependencies.session import get_session
 from domain.audit.enums import AuditAction, AuditEntityType
 from domain.models.user import User
 from domain.user.schemas import UserRead, UserRegister
 from services.audit_service import audit_event
-from services.auth_service import ensure_role, hash_password
+from services.auth_service import (
+    can_create_roles,
+    grant_role,
+    hash_password,
+)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
-_MasterOnly = Annotated[CurrentUser, Depends(require_role("master"))]
 _SessionDep = Annotated[Session, Depends(get_session)]
+_CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
 
 
 @router.post(
@@ -26,25 +31,39 @@ _SessionDep = Annotated[Session, Depends(get_session)]
     status_code=status.HTTP_201_CREATED,
     responses={
         401: {"description": "missing or invalid bearer token"},
-        403: {"description": "only master can register users"},
+        403: {
+            "description": "actor not authorized to create one or more of the requested roles"
+        },
         409: {"description": "email already registered"},
     },
 )
 def register_user(
     payload: UserRegister,
     session: _SessionDep,
-    actor: _MasterOnly,
+    actor: _CurrentUserDep,
 ) -> UserRead:
     """
-    Create a new user. Requires a master token.
+    Create a new user with one or more roles.
 
-    The first master must be bootstrapped via `scripts/create_master.py`
-    (which writes directly to the database, bypassing this endpoint).
+    Authorization rules (see `can_create_roles`):
+      - dev             can create: dev, crisis_manager, shelter_manager, sheltered
+      - crisis_manager  can create: shelter_manager, sheltered
+      - shelter_manager can create: sheltered
+      - sheltered       can create nothing
+
+    The first dev must be bootstrapped via `scripts/seed.py`.
     """
-    role_row = ensure_role(session, payload.role)
+    if not can_create_roles(actor.roles, payload.roles):
+        actor_label = ",".join(sorted(r.value for r in actor.roles)) or "(none)"
+        target_label = ",".join(sorted(r.value for r in payload.roles))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"roles [{actor_label}] cannot create one or more of [{target_label}]"
+            ),
+        )
 
     user = User(
-        role_id=role_row.id,
         organization_id=payload.organization_id,
         name=payload.name,
         email=payload.email,
@@ -62,13 +81,19 @@ def register_user(
             detail="email already registered",
         ) from exc
 
+    for role in payload.roles:
+        grant_role(session, user_id=user.id, role=role)
+
     audit_event(
         session,
         entity_type=AuditEntityType.USER.value,
         entity_id=user.id,
         action=AuditAction.CREATE.value,
         author_id=actor.id,
-        payload={"email": user.email, "role": payload.role.value},
+        payload={
+            "email": user.email,
+            "roles": [r.value for r in payload.roles],
+        },
     )
 
     session.commit()
@@ -78,7 +103,7 @@ def register_user(
         id=user.id,
         name=user.name,
         email=user.email,
-        role=payload.role,
+        roles=payload.roles,
         organization_id=user.organization_id,
         phone=user.phone,
         verified=user.verified,
