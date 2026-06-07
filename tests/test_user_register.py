@@ -17,7 +17,7 @@ _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 _VALID_PAYLOAD = {
     "name": "Carlos da Silva",
-    "email": "carlos@example.com",
+    "email": "carlos@horizonteseguro.app",
     "password": "supersecret-1234",
     "role": "standard",
 }
