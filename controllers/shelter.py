@@ -6,16 +6,16 @@ from sqlalchemy.orm import Session
 
 from dependencies.auth import CurrentUser, require_role
 from dependencies.session import get_session
+from domain.models.shelter import Shelter
+from domain.shelter.schemas import (
+    ShelterCreateRequest,
+    ShelterListItemResponse,
+    ShelterRead,
+    ShelterUpdateRequest,
+)
 from repositories import ShelterRepository
 from schemas.pagination import Page, PaginationParams, pagination_params
 from services.shelter import ShelterService
-from domain.models.shelter import Shelter
-from domain.shelter.schemas import (
-    ShelterCreate,
-    ShelterListItemResponse,
-    ShelterRead,
-    ShelterUpdate,
-)
 
 
 router = APIRouter(prefix="/shelters", tags=["shelters"])
@@ -55,7 +55,7 @@ def get_shelter(
 
 @router.post("", response_model=ShelterRead, status_code=status.HTTP_201_CREATED)
 def create_shelter(
-    payload: ShelterCreate,
+    payload: ShelterCreateRequest,
     session: _SessionDep,
     user: _WriteDep,
 ) -> Shelter:
@@ -73,7 +73,7 @@ def create_shelter(
 )
 def update_shelter(
     shelter_id: UUID,
-    payload: ShelterUpdate,
+    payload: ShelterUpdateRequest,
     session: _SessionDep,
     _user: _WriteDep,
 ) -> Shelter:

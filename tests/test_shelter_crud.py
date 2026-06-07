@@ -17,11 +17,6 @@ _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 def _shelter_payload(**kwargs) -> dict:
     return {
-        "organization_id": kwargs.get("organization_id"),
-        "responsible_user_id": str(
-            kwargs.get("responsible_user_id", uuid.uuid4())
-        ),
-        "verified_by": kwargs.get("verified_by"),
         "name": kwargs.get("name", "Abrigo Central"),
         "address": kwargs.get("address", "Rua Principal, 100"),
         "latitude": kwargs.get("latitude", -23.55),
@@ -29,8 +24,6 @@ def _shelter_payload(**kwargs) -> dict:
         "capacity": kwargs.get("capacity", 100),
         "occupation": kwargs.get("occupation", 25),
         "shelter_type": kwargs.get("shelter_type", ShelterType.INSTITUTIONAL.value),
-        "status": kwargs.get("status", ShelterStatus.ACTIVE.value),
-        "verified": kwargs.get("verified", True),
     }
 
 
@@ -117,7 +110,9 @@ class TestListShelters:
             _make_shelter(name="Abrigo 2", shelter_type=ShelterType.IMPROVISED_PUBLIC),
         ]
         app.dependency_overrides[get_session] = _session_returning(shelters)
-        response = TestClient(app).get("/shelters?page=1&size=10", headers=auth_headers("dev"))
+        response = TestClient(app).get(
+            "/shelters?page=1&size=10", headers=auth_headers("dev")
+        )
 
         assert response.status_code == 200
         body = response.json()
@@ -177,16 +172,42 @@ class TestCreateShelter:
         body = response.json()
         assert body["name"] == "Abrigo Central"
         assert body["created_by"] == str(user_id)
+        assert body["responsible_user_id"] == str(user_id)
+        assert body["organization_id"] is None
+        assert body["verified"] is False
+        assert body["verified_by"] is None
+        assert body["status"] == "preparing"
 
-    def test_create_does_not_require_created_by_in_payload(self):
+    def test_create_does_not_require_administrative_fields_in_payload(self):
         payload = _shelter_payload()
         assert "created_by" not in payload
+        assert "responsible_user_id" not in payload
+        assert "verified_by" not in payload
+        assert "verified" not in payload
+        assert "status" not in payload
         app.dependency_overrides[get_session] = _session_for_create()
         response = TestClient(app).post(
             "/shelters", json=payload, headers=auth_headers("dev")
         )
 
         assert response.status_code == 201
+
+    def test_create_rejects_administrative_fields(self):
+        payload = {
+            **_shelter_payload(),
+            "created_by": str(uuid.uuid4()),
+            "responsible_user_id": str(uuid.uuid4()),
+            "verified_by": str(uuid.uuid4()),
+            "status": "active",
+            "verified": True,
+            "crisis_id": str(uuid.uuid4()),
+        }
+        app.dependency_overrides[get_session] = _session_for_create()
+        response = TestClient(app).post(
+            "/shelters", json=payload, headers=auth_headers("dev")
+        )
+
+        assert response.status_code == 422
 
     def test_create_as_sheltered_returns_403(self):
         app.dependency_overrides[get_session] = _session_for_create()
@@ -227,6 +248,19 @@ class TestUpdateShelter:
         )
 
         assert response.status_code == 404
+
+    def test_patch_rejects_administrative_fields(self):
+        shelter = _make_shelter(verified=False, status=ShelterStatus.PREPARING)
+        app.dependency_overrides[get_session] = _session_get(shelter)
+        response = TestClient(app).patch(
+            f"/shelters/{shelter.id}",
+            json={"verified": True, "status": "active", "crisis_id": str(uuid.uuid4())},
+            headers=auth_headers("shelter_manager"),
+        )
+
+        assert response.status_code == 422
+        assert shelter.verified is False
+        assert shelter.status == ShelterStatus.PREPARING
 
 
 class TestDeleteShelter:

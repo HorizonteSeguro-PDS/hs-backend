@@ -7,7 +7,11 @@ import pytest
 from domain.errors.http import ResourceNotFoundError
 from domain.models.shelter import Shelter
 from domain.schemas.enums import ShelterStatus, ShelterType
-from domain.shelter.schemas import ShelterCreate, ShelterRead, ShelterUpdate
+from domain.shelter.schemas import (
+    ShelterCreateRequest,
+    ShelterRead,
+    ShelterUpdateRequest,
+)
 from schemas.pagination import PaginationParams
 from services import ShelterService
 
@@ -36,16 +40,13 @@ def _make_shelter(**kwargs) -> Shelter:
     return shelter
 
 
-def _create_payload() -> ShelterCreate:
-    return ShelterCreate(
-        responsible_user_id=uuid.uuid4(),
+def _create_payload() -> ShelterCreateRequest:
+    return ShelterCreateRequest(
         name="Abrigo Central",
         address="Rua Principal, 100",
         capacity=100,
         occupation=25,
         shelter_type=ShelterType.INSTITUTIONAL,
-        status=ShelterStatus.ACTIVE,
-        verified=True,
     )
 
 
@@ -91,6 +92,11 @@ def test_create_shelter_fills_created_by_from_authenticated_user():
     repository.flush.assert_called_once_with()
     repository.refresh.assert_called_once_with(created)
     assert created.created_by == user_id
+    assert created.responsible_user_id == user_id
+    assert created.organization_id is None
+    assert created.verified is False
+    assert created.verified_by is None
+    assert created.status == ShelterStatus.PREPARING
 
 
 def test_update_shelter_updates_only_payload_fields():
@@ -101,7 +107,7 @@ def test_update_shelter_updates_only_payload_fields():
 
     updated = service.update_shelter(
         shelter.id,
-        ShelterUpdate(name="Abrigo Novo", occupation=40),
+        ShelterUpdateRequest(name="Abrigo Novo", occupation=40),
     )
 
     assert updated.name == "Abrigo Novo"
