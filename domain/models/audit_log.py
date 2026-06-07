@@ -1,11 +1,30 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import VARCHAR, Index, func
+from sqlalchemy import Enum as PgEnum, Index, func
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from domain.audit.enums import AuditAction, AuditEntityType
 from utils.database import Base
+
+# Migration 0003 turned `audit_log.action` and `audit_log.entity_type` into
+# Postgres native enums. The model has to match the DB types — otherwise
+# SQLAlchemy sends VARCHAR params on INSERT and Postgres rejects with
+# ProgrammingError (column type mismatch).
+
+audit_action_pg = PgEnum(
+    AuditAction,
+    name="audit_action",
+    create_type=False,
+    values_callable=lambda obj: [e.value for e in obj],
+)
+audit_entity_type_pg = PgEnum(
+    AuditEntityType,
+    name="audit_entity_type",
+    create_type=False,
+    values_callable=lambda obj: [e.value for e in obj],
+)
 
 
 class AuditLog(Base):
@@ -16,9 +35,11 @@ class AuditLog(Base):
         primary_key=True,
         server_default=func.gen_random_uuid(),
     )
-    entity_type: Mapped[str] = mapped_column(VARCHAR, nullable=False)
+    entity_type: Mapped[AuditEntityType] = mapped_column(
+        audit_entity_type_pg, nullable=False
+    )
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    action: Mapped[str] = mapped_column(VARCHAR, nullable=False)
+    action: Mapped[AuditAction] = mapped_column(audit_action_pg, nullable=False)
     # TODO: add FK to users(id) once users table exists
     author_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     payload: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
