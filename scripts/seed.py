@@ -5,9 +5,11 @@ Usage:
     python scripts/seed.py --reset   # delete seeded rows first
 
 Creates:
-  - 3 users — one per role (master / standard / oversight) — all under
-    @horizonteseguro.app and sharing the password `admin1234`
-  - 5 sample crises authored by the master user
+  - 4 single-role users (dev / crisis_manager / shelter_manager / sheltered)
+  - 1 multi-role user (crisis_manager + shelter_manager) — for testing
+    that require_role accepts ANY-match across the user's roles
+  - 5 sample crises authored by the dev user, scoped to the crisis_manager
+    via users_crises
 
 Idempotent: re-running skips rows that already exist (matched by email for
 users and by name for crises). Use --reset to wipe the seeded rows first.
@@ -26,30 +28,42 @@ from domain.crisis.enums import CrisisStatus, CrisisType  # noqa: E402
 from domain.models.audit_log import AuditLog  # noqa: E402, F401 — registers metadata
 from domain.models.crisis import Crisis  # noqa: E402
 from domain.models.user import User  # noqa: E402
+from domain.models.user_role import UserRole  # noqa: E402
+from domain.models.users_crises import UsersCrises  # noqa: E402
 from services.auth_service import (  # noqa: E402
     create_access_token,
-    ensure_role,
+    grant_role,
     hash_password,
 )
 from utils.database import SessionLocal  # noqa: E402
 
 DEFAULT_PASSWORD = "admin1234"
 
-USERS_SPEC = [
+USERS_SPEC: list[dict] = [
     {
-        "role": Role.MASTER,
         "email": "admin@horizonteseguro.app",
-        "name": "Admin",
+        "name": "Admin Dev",
+        "roles": [Role.DEV],
     },
     {
-        "role": Role.STANDARD,
-        "email": "standard@horizonteseguro.app",
-        "name": "Standard Tester",
+        "email": "gestor.crise@horizonteseguro.app",
+        "name": "Gestor de Crise",
+        "roles": [Role.CRISIS_MANAGER],
     },
     {
-        "role": Role.OVERSIGHT,
-        "email": "oversight@horizonteseguro.app",
-        "name": "Oversight Tester",
+        "email": "gestor.abrigo@horizonteseguro.app",
+        "name": "Gestor de Abrigo",
+        "roles": [Role.SHELTER_MANAGER],
+    },
+    {
+        "email": "abrigado@horizonteseguro.app",
+        "name": "Pessoa Abrigada",
+        "roles": [Role.SHELTERED],
+    },
+    {
+        "email": "multi@horizonteseguro.app",
+        "name": "Multi-role Tester",
+        "roles": [Role.CRISIS_MANAGER, Role.SHELTER_MANAGER],
     },
 ]
 
@@ -103,25 +117,36 @@ SEEDED_CRISIS_NAMES = [c["name"] for c in CRISES_SPEC]
 
 def reset(session) -> None:
     """Wipe rows previously inserted by this seeder. Safe to run repeatedly."""
+    seeded_user_rows = session.scalars(
+        select(User).where(User.email.in_(SEEDED_USER_EMAILS))
+    ).all()
+    seeded_user_ids = [u.id for u in seeded_user_rows]
+
     session.execute(delete(Crisis).where(Crisis.name.in_(SEEDED_CRISIS_NAMES)))
-    session.execute(delete(User).where(User.email.in_(SEEDED_USER_EMAILS)))
+    if seeded_user_ids:
+        session.execute(
+            delete(UsersCrises).where(UsersCrises.user_id.in_(seeded_user_ids))
+        )
+        session.execute(delete(UserRole).where(UserRole.user_id.in_(seeded_user_ids)))
+        session.execute(delete(User).where(User.id.in_(seeded_user_ids)))
     session.commit()
-    print("[seed] reset: deleted seeded users and crises.")
+    print("[seed] reset: deleted seeded users, crises and grants.")
 
 
-def seed_users(session) -> dict[Role, User]:
-    """Get-or-create test users keyed by role. Returns {role: user}."""
-    by_role: dict[Role, User] = {}
+def seed_users(session) -> dict[str, tuple[User, list[Role]]]:
+    """Get-or-create seed users keyed by email. Returns {email: (user, roles)}."""
+    out: dict[str, tuple[User, list[Role]]] = {}
     for spec in USERS_SPEC:
         existing = session.scalar(select(User).where(User.email == spec["email"]))
         if existing is not None:
             print(f"[seed] user {spec['email']} already exists.")
-            by_role[spec["role"]] = existing
+            # Ensure roles match the spec (idempotent: grant_role no-ops on dup)
+            for role in spec["roles"]:
+                grant_role(session, user_id=existing.id, role=role)
+            out[spec["email"]] = (existing, list(spec["roles"]))
             continue
 
-        role_row = ensure_role(session, spec["role"])
         user = User(
-            role_id=role_row.id,
             organization_id=None,
             name=spec["name"],
             email=spec["email"],
@@ -131,35 +156,65 @@ def seed_users(session) -> dict[Role, User]:
         )
         session.add(user)
         session.flush()
-        by_role[spec["role"]] = user
-        print(f"[seed] created user {spec['email']} (role={spec['role'].value})")
-    return by_role
+        for role in spec["roles"]:
+            grant_role(session, user_id=user.id, role=role)
+        out[spec["email"]] = (user, list(spec["roles"]))
+        role_label = ",".join(r.value for r in spec["roles"])
+        print(f"[seed] created user {spec['email']} (roles={role_label})")
+    return out
 
 
-def seed_crises(session, *, author_id) -> int:
-    """Insert sample crises owned by `author_id`. Skip if name already exists."""
+def seed_crises(session, *, author_id) -> list[Crisis]:
+    """Insert sample crises owned by `author_id`. Returns the full list of
+    seed crises (existing + newly inserted)."""
+    rows: list[Crisis] = []
     inserted = 0
     for data in CRISES_SPEC:
         existing = session.scalar(select(Crisis).where(Crisis.name == data["name"]))
         if existing is not None:
+            rows.append(existing)
             continue
-        session.add(Crisis(**data, created_by=author_id))
+        crisis = Crisis(**data, created_by=author_id)
+        session.add(crisis)
+        session.flush()
+        rows.append(crisis)
         inserted += 1
-    return inserted
+    if inserted:
+        print(f"[seed] {inserted} new crises created.")
+    else:
+        print("[seed] all sample crises already exist.")
+    return rows
 
 
-def print_credentials(users: dict[Role, User]) -> None:
+def grant_scope(session, *, crisis_manager_user_id, crises: list[Crisis]) -> None:
+    """Populate users_crises for the crisis_manager seed user, idempotent."""
+    granted = 0
+    for c in crises:
+        existing = session.scalar(
+            select(UsersCrises).where(
+                UsersCrises.user_id == crisis_manager_user_id,
+                UsersCrises.crisis_id == c.id,
+            )
+        )
+        if existing is not None:
+            continue
+        session.add(UsersCrises(user_id=crisis_manager_user_id, crisis_id=c.id))
+        granted += 1
+    if granted:
+        print(f"[seed] granted scope on {granted} crises to crisis_manager.")
+
+
+def print_credentials(users: dict[str, tuple[User, list[Role]]]) -> None:
     print()
     print("=== Usuarios seeded ===")
     print(f"Senha (para todos): {DEFAULT_PASSWORD}")
     print("Se a senha nao funcionar, rode o seed com --reset.\n")
     print("=== JWTs (validos por 24h) ===")
-    for role in (Role.MASTER, Role.STANDARD, Role.OVERSIGHT):
-        user = users.get(role)
-        if user is None:
-            continue
-        token, _ = create_access_token(user_id=user.id, role=role)
-        print(f"\n[{role.value}]")
+    for spec in USERS_SPEC:
+        user, roles = users[spec["email"]]
+        token, _ = create_access_token(user_id=user.id, roles=roles)
+        role_label = ",".join(r.value for r in roles)
+        print(f"\n[{role_label}]")
         print(f"  email:   {user.email}")
         print(f"  user_id: {user.id}")
         print(f"  token:   {token}")
@@ -177,17 +232,18 @@ def run(reset_first: bool) -> int:
         users = seed_users(session)
         session.commit()
 
-        master = users.get(Role.MASTER)
-        if master is None:
-            print("[seed] ERROR: master user not available to author crises.")
-            return 1
+        dev_user, _ = users["admin@horizonteseguro.app"]
+        crisis_mgr, _ = users["gestor.crise@horizonteseguro.app"]
 
-        inserted = seed_crises(session, author_id=master.id)
+        crises = seed_crises(session, author_id=dev_user.id)
         session.commit()
-        if inserted:
-            print(f"[seed] {inserted} new crises created.")
-        else:
-            print("[seed] all sample crises already exist.")
+
+        grant_scope(
+            session,
+            crisis_manager_user_id=crisis_mgr.id,
+            crises=crises,
+        )
+        session.commit()
 
         print_credentials(users)
     return 0
@@ -198,7 +254,7 @@ def main() -> int:
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="Delete previously-seeded users and crises before inserting.",
+        help="Delete previously-seeded users, crises and grants before inserting.",
     )
     args = parser.parse_args()
     return run(reset_first=args.reset)
