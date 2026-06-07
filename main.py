@@ -14,15 +14,17 @@ from controllers.user import router as user_router
 # Piggyback on uvicorn's configured error logger — `hs-backend` would have no
 # handler attached and the message would silently drop on the floor.
 logger = logging.getLogger("uvicorn.error")
+DOCS_URL = "/api/docs"
+LOCAL_SWAGGER_URL = f"http://127.0.0.1:8000{DOCS_URL}"
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    logging.getLogger("uvicorn.error").info("Swagger UI: /api/docs")
+    logging.getLogger("uvicorn.error").info("Swagger UI: %s", LOCAL_SWAGGER_URL)
     yield
 
 
-app = FastAPI(title="hs-backend", docs_url="/api/docs", lifespan=lifespan)
+app = FastAPI(title="hs-backend", docs_url=DOCS_URL, lifespan=lifespan)
 
 app.include_router(auth_router)
 app.include_router(crisis_router)
