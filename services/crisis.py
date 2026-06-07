@@ -38,7 +38,7 @@ class CrisisService(BaseService[Crisis]):
     def get_crisis_detail(self, crisis_id: UUID) -> CrisisDetailResponse:
         crisis = self.repository.get_with_shelters(crisis_id)
         if crisis is None:
-            raise ResourceNotFoundError()
+            raise ResourceNotFoundError("crisis not found")
         return CrisisDetailResponse.model_validate(crisis)
 
     def _list_item_from_row(self, row: CrisisListRow) -> CrisisListItemResponse:
