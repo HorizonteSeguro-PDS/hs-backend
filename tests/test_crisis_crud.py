@@ -90,10 +90,10 @@ class TestCreateCrisis:
     def teardown_method(self):
         app.dependency_overrides = {}
 
-    def test_create_as_master_returns_201(self):
+    def test_create_as_dev_returns_201(self):
         app.dependency_overrides[get_session] = _session_for_create()
         response = TestClient(app).post(
-            "/crises", json=_FLOOD_PAYLOAD, headers=auth_headers("master")
+            "/crises", json=_FLOOD_PAYLOAD, headers=auth_headers("dev")
         )
         assert response.status_code == 201
         body = response.json()
@@ -102,10 +102,10 @@ class TestCreateCrisis:
         assert body["type"] == "flood"
         assert "id" in body
 
-    def test_create_as_oversight_returns_403(self):
+    def test_create_as_sheltered_returns_403(self):
         app.dependency_overrides[get_session] = _session_for_create()
         response = TestClient(app).post(
-            "/crises", json=_FLOOD_PAYLOAD, headers=auth_headers("oversight")
+            "/crises", json=_FLOOD_PAYLOAD, headers=auth_headers("sheltered")
         )
         assert response.status_code == 403
 
@@ -119,7 +119,7 @@ class TestListCrises:
 
     def test_empty_list(self):
         app.dependency_overrides[get_session] = _session_returning([])
-        response = TestClient(app).get("/crises", headers=auth_headers("oversight"))
+        response = TestClient(app).get("/crises", headers=auth_headers("sheltered"))
         assert response.status_code == 200
         assert response.json() == []
 
@@ -129,21 +129,21 @@ class TestListCrises:
             _make_crisis(name="Incêndio BA", type=CrisisType.FIRE),
         ]
         app.dependency_overrides[get_session] = _session_returning(crises)
-        response = TestClient(app).get("/crises", headers=auth_headers("master"))
+        response = TestClient(app).get("/crises", headers=auth_headers("dev"))
         assert response.status_code == 200
         assert len(response.json()) == 2
 
     def test_filter_by_status_param_accepted(self):
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get(
-            "/crises?status=active", headers=auth_headers("standard")
+            "/crises?status=active", headers=auth_headers("crisis_manager")
         )
         assert response.status_code == 200
 
     def test_filter_by_state_param_accepted(self):
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get(
-            "/crises?state=SP", headers=auth_headers("oversight")
+            "/crises?state=SP", headers=auth_headers("sheltered")
         )
         assert response.status_code == 200
 
@@ -158,7 +158,7 @@ class TestGetCrisis:
     def test_get_nonexistent_returns_404(self):
         app.dependency_overrides[get_session] = _session_get(None)
         response = TestClient(app).get(
-            f"/crises/{uuid.uuid4()}", headers=auth_headers("master")
+            f"/crises/{uuid.uuid4()}", headers=auth_headers("dev")
         )
         assert response.status_code == 404
 
@@ -166,7 +166,7 @@ class TestGetCrisis:
         crisis = _make_crisis()
         app.dependency_overrides[get_session] = _session_get(crisis)
         response = TestClient(app).get(
-            f"/crises/{crisis.id}", headers=auth_headers("oversight")
+            f"/crises/{crisis.id}", headers=auth_headers("sheltered")
         )
         assert response.status_code == 200
         assert response.json()["id"] == str(crisis.id)
@@ -180,13 +180,13 @@ class TestUpdateCrisis:
     def teardown_method(self):
         app.dependency_overrides = {}
 
-    def test_patch_as_standard_updates_fields(self):
+    def test_patch_as_crisis_manager_updates_fields(self):
         crisis = _make_crisis(name="Original")
         app.dependency_overrides[get_session] = _session_get(crisis)
         response = TestClient(app).patch(
             f"/crises/{crisis.id}",
             json={"name": "Atualizado"},
-            headers=auth_headers("standard"),
+            headers=auth_headers("crisis_manager"),
         )
         assert response.status_code == 200
         assert response.json()["name"] == "Atualizado"
@@ -196,7 +196,7 @@ class TestUpdateCrisis:
         response = TestClient(app).patch(
             f"/crises/{uuid.uuid4()}",
             json={"name": "X"},
-            headers=auth_headers("master"),
+            headers=auth_headers("dev"),
         )
         assert response.status_code == 404
 
@@ -214,7 +214,7 @@ class TestCloseCrisis:
         response = TestClient(app).post(
             f"/crises/{crisis.id}/close",
             json={"close_reason": "Situação normalizada."},
-            headers=auth_headers("standard"),
+            headers=auth_headers("crisis_manager"),
         )
         assert response.status_code == 200
         assert response.json()["status"] == "closed"
@@ -225,7 +225,7 @@ class TestCloseCrisis:
         response = TestClient(app).post(
             f"/crises/{crisis.id}/close",
             json={"close_reason": "Segunda tentativa."},
-            headers=auth_headers("master"),
+            headers=auth_headers("dev"),
         )
         assert response.status_code == 409
 
@@ -242,7 +242,7 @@ class TestReopenCrisis:
         app.dependency_overrides[get_session] = _session_get(crisis)
         response = TestClient(app).post(
             f"/crises/{crisis.id}/reopen",
-            headers=auth_headers("master"),
+            headers=auth_headers("dev"),
         )
         assert response.status_code == 200
         assert response.json()["status"] == "active"
@@ -252,6 +252,6 @@ class TestReopenCrisis:
         app.dependency_overrides[get_session] = _session_get(crisis)
         response = TestClient(app).post(
             f"/crises/{crisis.id}/reopen",
-            headers=auth_headers("master"),
+            headers=auth_headers("dev"),
         )
         assert response.status_code == 409
