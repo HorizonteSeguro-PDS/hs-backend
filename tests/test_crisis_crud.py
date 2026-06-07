@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
+import controllers.crisis as crisis_controller
 from dependencies.session import get_session
 from domain.crisis.enums import CrisisStatus, CrisisType
 from domain.models.crisis import Crisis
@@ -38,6 +39,7 @@ def _make_crisis(**kwargs) -> Crisis:
     c.id = kwargs.get("id", uuid.uuid4())
     c.created_at = kwargs.get("created_at", _NOW)
     c.updated_at = kwargs.get("updated_at", _NOW)
+    c.shelters_count = kwargs.get("shelters_count", 0)
     return c
 
 
@@ -52,6 +54,7 @@ def _session_for_create():
                 obj.id = uuid.uuid4()
                 obj.created_at = _NOW
                 obj.updated_at = _NOW
+                obj.shelters_count = 0
                 if obj.status is None:
                     obj.status = CrisisStatus.ACTIVE
 
@@ -61,23 +64,27 @@ def _session_for_create():
     return override
 
 
-def _session_returning(crises: list):
-    """Session mock whose scalars() returns an iterable (controller uses list())."""
+def _session_returning(crises: list, total: int | None = None):
+    """Session mock for CrisisRepository.list_paginated()."""
 
     def override():
         mock = MagicMock()
-        mock.scalars.return_value = crises
+        mock.scalar.return_value = len(crises) if total is None else total
+        mock.execute.return_value.all.return_value = [
+            (crisis, getattr(crisis, "shelters_count", 0)) for crisis in crises
+        ]
         yield mock
 
     return override
 
 
 def _session_get(crisis):
-    """Session mock whose get() returns the given object (or None)."""
+    """Session mock for CrisisRepository.get_with_shelters()."""
 
     def override():
         mock = MagicMock()
         mock.get.return_value = crisis
+        mock.scalar.return_value = crisis
         yield mock
 
     return override
@@ -121,7 +128,13 @@ class TestListCrises:
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get("/crises", headers=auth_headers("sheltered"))
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {
+            "items": [],
+            "total": 0,
+            "page": 1,
+            "size": 10,
+            "pages": 0,
+        }
 
     def test_returns_crises(self):
         crises = [
@@ -131,7 +144,29 @@ class TestListCrises:
         app.dependency_overrides[get_session] = _session_returning(crises)
         response = TestClient(app).get("/crises", headers=auth_headers("dev"))
         assert response.status_code == 200
-        assert len(response.json()) == 2
+        body = response.json()
+        assert len(body["items"]) == 2
+        assert body["total"] == 2
+        assert body["page"] == 1
+        assert body["size"] == 10
+        assert body["pages"] == 1
+        assert body["items"][0]["shelters_count"] == 0
+        assert "created_by" not in body["items"][0]
+        assert "close_reason" not in body["items"][0]
+
+    def test_uses_requested_page_and_size(self):
+        crises = [_make_crisis(name="Incêndio BA", type=CrisisType.FIRE)]
+        app.dependency_overrides[get_session] = _session_returning(crises, total=2)
+        response = TestClient(app).get(
+            "/crises?page=2&size=1", headers=auth_headers("dev")
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert len(body["items"]) == 1
+        assert body["total"] == 2
+        assert body["page"] == 2
+        assert body["size"] == 1
+        assert body["pages"] == 2
 
     def test_filter_by_status_param_accepted(self):
         app.dependency_overrides[get_session] = _session_returning([])
@@ -144,6 +179,59 @@ class TestListCrises:
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get(
             "/crises?state=SP", headers=auth_headers("sheltered")
+        )
+        assert response.status_code == 200
+
+    def test_filter_by_type_param_is_forwarded_to_service(self, monkeypatch):
+        captured = {}
+
+        class FakeCrisisService:
+            def __init__(self, repository):
+                self.repository = repository
+
+            def list_crises(
+                self,
+                params,
+                *,
+                status=None,
+                state=None,
+                type_=None,
+            ):
+                captured["type_"] = type_
+                return {
+                    "items": [],
+                    "total": 0,
+                    "page": params.page,
+                    "size": params.size,
+                    "pages": 0,
+                }
+
+        monkeypatch.setattr(crisis_controller, "CrisisService", FakeCrisisService)
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get(
+            "/crises?type=flood", headers=auth_headers("sheltered")
+        )
+        assert response.status_code == 200
+        assert captured["type_"] == CrisisType.FLOOD
+
+    def test_page_must_start_at_one(self):
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get(
+            "/crises?page=0", headers=auth_headers("sheltered")
+        )
+        assert response.status_code == 422
+
+    def test_size_has_max_limit(self):
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get(
+            "/crises?size=101", headers=auth_headers("sheltered")
+        )
+        assert response.status_code == 422
+
+    def test_size_max_limit_is_accepted(self):
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get(
+            "/crises?size=100", headers=auth_headers("sheltered")
         )
         assert response.status_code == 200
 

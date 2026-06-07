@@ -3,16 +3,25 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from dependencies.auth import CurrentUser, require_role
 from dependencies.session import get_session
 from domain.audit.enums import AuditAction, AuditEntityType
 from domain.crisis.enums import CrisisStatus, CrisisType
-from domain.crisis.schemas import CrisisClose, CrisisCreate, CrisisRead, CrisisUpdate
+from domain.crisis.schemas import (
+    CrisisClose,
+    CrisisCreate,
+    CrisisDetailResponse,
+    CrisisListItemResponse,
+    CrisisRead,
+    CrisisUpdate,
+)
 from domain.models.crisis import Crisis
+from repositories import CrisisRepository
+from schemas.pagination import Page, PaginationParams, pagination_params
 from services.audit_service import audit_event
+from services.crisis import CrisisService
 
 
 router = APIRouter(prefix="/crises", tags=["crises"])
@@ -26,6 +35,7 @@ _ReadDep = Annotated[
 ]
 _WriteDep = Annotated[CurrentUser, Depends(require_role("dev", "crisis_manager"))]
 _SessionDep = Annotated[Session, Depends(get_session)]
+_PaginationDep = Annotated[PaginationParams, Depends(pagination_params)]
 
 
 @router.post("", response_model=CrisisRead, status_code=status.HTTP_201_CREATED)
@@ -52,40 +62,36 @@ def create_crisis(
     return crisis
 
 
-@router.get("", response_model=list[CrisisRead])
+@router.get("", response_model=Page[CrisisListItemResponse])
 def list_crises(
     session: _SessionDep,
     _user: _ReadDep,
-    limit: Annotated[int, Query(ge=1, le=200)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    pagination: _PaginationDep,
     status: Annotated[CrisisStatus | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
-    type: Annotated[CrisisType | None, Query()] = None,
-) -> list[Crisis]:
-    stmt = select(Crisis).order_by(Crisis.created_at.desc()).limit(limit).offset(offset)
-    if status is not None:
-        stmt = stmt.where(Crisis.status == status)
-    if state is not None:
-        stmt = stmt.where(Crisis.state == state)
-    if type is not None:
-        stmt = stmt.where(Crisis.type == type)
-    return list(session.scalars(stmt))
+    type_: Annotated[CrisisType | None, Query(alias="type")] = None,
+) -> Page[CrisisListItemResponse]:
+    service = CrisisService(CrisisRepository(session))
+    return service.list_crises(
+        pagination,
+        status=status,
+        state=state,
+        type_=type_,
+    )
 
 
 @router.get(
     "/{crisis_id}",
-    response_model=CrisisRead,
+    response_model=CrisisDetailResponse,
     responses={404: {"description": "crisis not found"}},
 )
 def get_crisis(
     crisis_id: UUID,
     session: _SessionDep,
     _user: _ReadDep,
-) -> Crisis:
-    crisis = session.get(Crisis, crisis_id)
-    if not crisis:
-        raise HTTPException(status_code=404, detail="crisis not found")
-    return crisis
+) -> CrisisDetailResponse:
+    service = CrisisService(CrisisRepository(session))
+    return service.get_crisis_detail(crisis_id)
 
 
 @router.patch(

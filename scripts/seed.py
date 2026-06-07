@@ -8,11 +8,13 @@ Creates:
   - 4 single-role users (dev / crisis_manager / shelter_manager / sheltered)
   - 1 multi-role user (crisis_manager + shelter_manager) — for testing
     that require_role accepts ANY-match across the user's roles
-  - 5 sample crises authored by the dev user, scoped to the crisis_manager
+  - sample crises authored by the dev user, scoped to the crisis_manager
     via users_crises
+  - sample shelters and M:N crisis/shelter links via crises_shelters
 
 Idempotent: re-running skips rows that already exist (matched by email for
-users and by name for crises). Use --reset to wipe the seeded rows first.
+users, by name for crises/shelters and by pair for links). Use --reset to wipe
+the seeded rows first.
 """
 
 import argparse
@@ -26,10 +28,13 @@ from sqlalchemy import delete, select  # noqa: E402
 from domain.auth.enums import Role  # noqa: E402
 from domain.crisis.enums import CrisisStatus, CrisisType  # noqa: E402
 from domain.models.audit_log import AuditLog  # noqa: E402, F401 — registers metadata
+from domain.models.crises_shelters import CrisesShelters  # noqa: E402
 from domain.models.crisis import Crisis  # noqa: E402
+from domain.models.shelter import Shelter  # noqa: E402
 from domain.models.user import User  # noqa: E402
 from domain.models.user_role import UserRole  # noqa: E402
 from domain.models.users_crises import UsersCrises  # noqa: E402
+from domain.schemas.enums import ShelterStatus, ShelterType  # noqa: E402
 from services.auth_service import (  # noqa: E402
     create_access_token,
     grant_role,
@@ -77,6 +82,33 @@ CRISES_SPEC = [
         "status": CrisisStatus.ACTIVE,
     },
     {
+        "name": "Enchente em Maceió",
+        "type": CrisisType.FLOOD,
+        "description": "Alagamentos em bairros ribeirinhos e necessidade de acolhimento emergencial.",
+        "state": "AL",
+        "city": "Maceió",
+        "severity_initial": 4,
+        "status": CrisisStatus.ACTIVE,
+    },
+    {
+        "name": "Deslizamento no Recife",
+        "type": CrisisType.LANDSLIDE,
+        "description": "Deslizamento em área de encosta com famílias desalojadas.",
+        "state": "PE",
+        "city": "Recife",
+        "severity_initial": 5,
+        "status": CrisisStatus.ACTIVE,
+    },
+    {
+        "name": "Estiagem Prolongada em Fortaleza",
+        "type": CrisisType.OTHER,
+        "description": "Seca/estiagem prolongada com restrição de abastecimento em comunidades vulneráveis.",
+        "state": "CE",
+        "city": "Fortaleza",
+        "severity_initial": 3,
+        "status": CrisisStatus.ACTIVE,
+    },
+    {
         "name": "Incêndio Florestal Chapada",
         "type": CrisisType.FIRE,
         "state": "BA",
@@ -111,8 +143,86 @@ CRISES_SPEC = [
     },
 ]
 
+SHELTERS_SPEC = [
+    {
+        "organization_id": None,
+        "responsible_user_id": None,
+        "created_by": None,
+        "verified_by": None,
+        "name": "Abrigo Comunitário Benedito Bentes",
+        "address": "Rua da Esperança, 120 - Benedito Bentes",
+        "latitude": -9.5568,
+        "longitude": -35.7327,
+        "capacity": 80,
+        "occupation": 32,
+        "shelter_type": ShelterType.COMMUNITY_HOME,
+        "status": ShelterStatus.ACTIVE,
+        "verified": True,
+    },
+    {
+        "organization_id": None,
+        "responsible_user_id": None,
+        "created_by": None,
+        "verified_by": None,
+        "name": "Escola Municipal Esperança",
+        "address": "Avenida Principal, 450 - Tabuleiro do Martins",
+        "latitude": -9.5901,
+        "longitude": -35.7585,
+        "capacity": 150,
+        "occupation": 74,
+        "shelter_type": ShelterType.IMPROVISED_PUBLIC,
+        "status": ShelterStatus.ACTIVE,
+        "verified": True,
+    },
+    {
+        "organization_id": None,
+        "responsible_user_id": None,
+        "created_by": None,
+        "verified_by": None,
+        "name": "Ginásio Poliesportivo Municipal",
+        "address": "Rua do Esporte, 88 - Centro",
+        "latitude": -12.9714,
+        "longitude": -38.5014,
+        "capacity": 220,
+        "occupation": 118,
+        "shelter_type": ShelterType.IMPROVISED_PUBLIC,
+        "status": ShelterStatus.ACTIVE,
+        "verified": True,
+    },
+    {
+        "organization_id": None,
+        "responsible_user_id": None,
+        "created_by": None,
+        "verified_by": None,
+        "name": "Centro de Apoio Humanitário Nordeste",
+        "address": "Avenida Recife Solidário, 1000 - Imbiribeira",
+        "latitude": -8.1087,
+        "longitude": -34.9093,
+        "capacity": 120,
+        "occupation": 45,
+        "shelter_type": ShelterType.INSTITUTIONAL,
+        "status": ShelterStatus.ACTIVE,
+        "verified": True,
+    },
+]
+
+CRISIS_SHELTER_LINKS = {
+    "Enchente em Maceió": [
+        "Abrigo Comunitário Benedito Bentes",
+        "Escola Municipal Esperança",
+    ],
+    "Deslizamento no Recife": [
+        "Centro de Apoio Humanitário Nordeste",
+    ],
+    "Incêndio Florestal Chapada": [
+        "Ginásio Poliesportivo Municipal",
+        "Centro de Apoio Humanitário Nordeste",
+    ],
+}
+
 SEEDED_USER_EMAILS = [u["email"] for u in USERS_SPEC]
 SEEDED_CRISIS_NAMES = [c["name"] for c in CRISES_SPEC]
+SEEDED_SHELTER_NAMES = [s["name"] for s in SHELTERS_SPEC]
 
 
 def reset(session) -> None:
@@ -121,8 +231,33 @@ def reset(session) -> None:
         select(User).where(User.email.in_(SEEDED_USER_EMAILS))
     ).all()
     seeded_user_ids = [u.id for u in seeded_user_rows]
+    seeded_crisis_rows = session.scalars(
+        select(Crisis).where(Crisis.name.in_(SEEDED_CRISIS_NAMES))
+    ).all()
+    seeded_crisis_ids = [c.id for c in seeded_crisis_rows]
+    seeded_shelter_rows = session.scalars(
+        select(Shelter).where(Shelter.name.in_(SEEDED_SHELTER_NAMES))
+    ).all()
+    seeded_shelter_ids = [s.id for s in seeded_shelter_rows]
 
-    session.execute(delete(Crisis).where(Crisis.name.in_(SEEDED_CRISIS_NAMES)))
+    if seeded_crisis_ids:
+        session.execute(
+            delete(CrisesShelters).where(
+                CrisesShelters.crisis_id.in_(seeded_crisis_ids)
+            )
+        )
+        session.execute(
+            delete(UsersCrises).where(UsersCrises.crisis_id.in_(seeded_crisis_ids))
+        )
+    if seeded_shelter_ids:
+        session.execute(
+            delete(CrisesShelters).where(
+                CrisesShelters.shelter_id.in_(seeded_shelter_ids)
+            )
+        )
+        session.execute(delete(Shelter).where(Shelter.id.in_(seeded_shelter_ids)))
+    if seeded_crisis_ids:
+        session.execute(delete(Crisis).where(Crisis.id.in_(seeded_crisis_ids)))
     if seeded_user_ids:
         session.execute(
             delete(UsersCrises).where(UsersCrises.user_id.in_(seeded_user_ids))
@@ -130,7 +265,7 @@ def reset(session) -> None:
         session.execute(delete(UserRole).where(UserRole.user_id.in_(seeded_user_ids)))
         session.execute(delete(User).where(User.id.in_(seeded_user_ids)))
     session.commit()
-    print("[seed] reset: deleted seeded users, crises and grants.")
+    print("[seed] reset: deleted seeded users, crises, shelters and grants.")
 
 
 def seed_users(session) -> dict[str, tuple[User, list[Role]]]:
@@ -186,6 +321,40 @@ def seed_crises(session, *, author_id) -> list[Crisis]:
     return rows
 
 
+def seed_shelters(
+    session,
+    *,
+    responsible_user_id,
+    created_by,
+    verified_by,
+) -> list[Shelter]:
+    """Insert sample shelters. Returns existing + newly inserted shelters."""
+    rows: list[Shelter] = []
+    inserted = 0
+    for spec in SHELTERS_SPEC:
+        existing = session.scalar(select(Shelter).where(Shelter.name == spec["name"]))
+        if existing is not None:
+            rows.append(existing)
+            continue
+
+        data = {
+            **spec,
+            "responsible_user_id": responsible_user_id,
+            "created_by": created_by,
+            "verified_by": verified_by if spec["verified"] else None,
+        }
+        shelter = Shelter(**data)
+        session.add(shelter)
+        session.flush()
+        rows.append(shelter)
+        inserted += 1
+    if inserted:
+        print(f"[seed] {inserted} new shelters created.")
+    else:
+        print("[seed] all sample shelters already exist.")
+    return rows
+
+
 def grant_scope(session, *, crisis_manager_user_id, crises: list[Crisis]) -> None:
     """Populate users_crises for the crisis_manager seed user, idempotent."""
     granted = 0
@@ -202,6 +371,56 @@ def grant_scope(session, *, crisis_manager_user_id, crises: list[Crisis]) -> Non
         granted += 1
     if granted:
         print(f"[seed] granted scope on {granted} crises to crisis_manager.")
+
+
+def link_crises_shelters(
+    session,
+    *,
+    crises: list[Crisis],
+    shelters: list[Shelter],
+) -> None:
+    """Populate crises_shelters links for sample data, idempotent."""
+    crises_by_name = {c.name: c for c in crises}
+    shelters_by_name = {s.name: s for s in shelters}
+    linked = 0
+
+    for crisis_name, shelter_names in CRISIS_SHELTER_LINKS.items():
+        crisis = crises_by_name.get(crisis_name)
+        if crisis is None:
+            raise RuntimeError(
+                f"Seed link references unknown crisis: {crisis_name!r}. "
+                "Check CRISIS_SHELTER_LINKS and CRISES_SPEC."
+            )
+
+        for shelter_name in shelter_names:
+            shelter = shelters_by_name.get(shelter_name)
+            if shelter is None:
+                raise RuntimeError(
+                    f"Seed link references unknown shelter: {shelter_name!r}. "
+                    "Check CRISIS_SHELTER_LINKS and SHELTERS_SPEC."
+                )
+
+            existing = session.scalar(
+                select(CrisesShelters).where(
+                    CrisesShelters.crisis_id == crisis.id,
+                    CrisesShelters.shelter_id == shelter.id,
+                )
+            )
+            if existing is not None:
+                continue
+
+            session.add(
+                CrisesShelters(
+                    crisis_id=crisis.id,
+                    shelter_id=shelter.id,
+                )
+            )
+            linked += 1
+
+    if linked:
+        print(f"[seed] linked {linked} crisis/shelter pairs.")
+    else:
+        print("[seed] all crisis/shelter links already exist.")
 
 
 def print_credentials(users: dict[str, tuple[User, list[Role]]]) -> None:
@@ -226,26 +445,40 @@ def print_credentials(users: dict[str, tuple[User, list[Role]]]) -> None:
 
 def run(reset_first: bool) -> int:
     with SessionLocal() as session:
-        if reset_first:
-            reset(session)
+        try:
+            if reset_first:
+                reset(session)
 
-        users = seed_users(session)
-        session.commit()
+            users = seed_users(session)
+            session.commit()
 
-        dev_user, _ = users["admin@horizonteseguro.app"]
-        crisis_mgr, _ = users["gestor.crise@horizonteseguro.app"]
+            dev_user, _ = users["admin@horizonteseguro.app"]
+            crisis_mgr, _ = users["gestor.crise@horizonteseguro.app"]
+            shelter_mgr, _ = users["gestor.abrigo@horizonteseguro.app"]
 
-        crises = seed_crises(session, author_id=dev_user.id)
-        session.commit()
+            crises = seed_crises(session, author_id=dev_user.id)
+            session.commit()
 
-        grant_scope(
-            session,
-            crisis_manager_user_id=crisis_mgr.id,
-            crises=crises,
-        )
-        session.commit()
+            shelters = seed_shelters(
+                session,
+                responsible_user_id=shelter_mgr.id,
+                created_by=dev_user.id,
+                verified_by=dev_user.id,
+            )
+            session.commit()
 
-        print_credentials(users)
+            grant_scope(
+                session,
+                crisis_manager_user_id=crisis_mgr.id,
+                crises=crises,
+            )
+            link_crises_shelters(session, crises=crises, shelters=shelters)
+            session.commit()
+
+            print_credentials(users)
+        except Exception:
+            session.rollback()
+            raise
     return 0
 
 
@@ -254,7 +487,7 @@ def main() -> int:
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="Delete previously-seeded users, crises and grants before inserting.",
+        help="Delete previously-seeded users, crises, shelters and grants before inserting.",
     )
     args = parser.parse_args()
     return run(reset_first=args.reset)
