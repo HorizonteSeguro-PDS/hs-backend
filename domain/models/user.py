@@ -16,8 +16,6 @@ class User(Base):
         primary_key=True,
         server_default=func.gen_random_uuid(),
     )
-    # FK to roles(id) — constraint lives in the migration (fk_users_role_id_roles)
-    role_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     # FK to organizations(id) — constraint lives in the migration
     # (fk_users_organization_id_organizations); not declared here because the
     # Organization model is not registered in metadata.

@@ -14,9 +14,8 @@ from main import app
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
-def _user(role: Role = Role.STANDARD) -> User:
+def _user() -> User:
     u = User(
-        role_id=uuid.uuid4(),
         organization_id=None,
         name="Test User",
         email="test@horizonteseguro.app",
@@ -49,8 +48,8 @@ class TestLogin:
         "controllers.auth.create_access_token", return_value=("fake.jwt.token", 86400)
     )
     def test_valid_credentials_returns_token(self, _mint, mock_auth):
-        user = _user(Role.STANDARD)
-        mock_auth.return_value = (user, Role.STANDARD)
+        user = _user()
+        mock_auth.return_value = (user, [Role.CRISIS_MANAGER])
         app.dependency_overrides[get_session] = _session()
 
         response = TestClient(app).post(
@@ -63,17 +62,36 @@ class TestLogin:
         assert body["token_type"] == "bearer"
         assert body["expires_in"] == 86400
         assert body["user"]["email"] == "test@horizonteseguro.app"
-        assert body["user"]["role"] == "standard"
-        # password must never appear in the response
+        assert body["user"]["roles"] == ["crisis_manager"]
         assert "password" not in body["user"]
         assert "password_hash" not in body["user"]
+
+    @patch("controllers.auth.authenticate")
+    @patch(
+        "controllers.auth.create_access_token", return_value=("fake.jwt.token", 86400)
+    )
+    def test_multi_role_user_login_returns_all_roles(self, _mint, mock_auth):
+        user = _user()
+        mock_auth.return_value = (user, [Role.CRISIS_MANAGER, Role.SHELTER_MANAGER])
+        app.dependency_overrides[get_session] = _session()
+
+        response = TestClient(app).post(
+            "/auth/login",
+            json={"email": "test@horizonteseguro.app", "password": "supersecret-1234"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert set(body["user"]["roles"]) == {"crisis_manager", "shelter_manager"}
 
     @patch("controllers.auth.authenticate", return_value=None)
     def test_invalid_credentials_returns_401(self, _auth):
         app.dependency_overrides[get_session] = _session()
         response = TestClient(app).post(
             "/auth/login",
-            json={"email": "test@horizonteseguro.app", "password": "wrong-password"},
+            json={
+                "email": "test@horizonteseguro.app",
+                "password": "wrong-password",
+            },
         )
         assert response.status_code == 401
         assert response.json()["detail"] == "invalid credentials"
@@ -84,7 +102,10 @@ class TestLogin:
         app.dependency_overrides[get_session] = _session()
         response = TestClient(app).post(
             "/auth/login",
-            json={"email": "nobody@horizonteseguro.app", "password": "anything"},
+            json={
+                "email": "nobody@horizonteseguro.app",
+                "password": "anything",
+            },
         )
         assert response.status_code == 401
         assert response.json()["detail"] == "invalid credentials"

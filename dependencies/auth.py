@@ -35,21 +35,23 @@ def require_role(*allowed_roles: str) -> Callable:
     """
     Factory that returns a FastAPI dependency enforcing role membership.
 
+    Passes if ANY of the user's roles is in the allowed set.
+
     Usage:
         @router.post("/crises")
-        def create(user=Depends(require_role("master", "standard")), ...): ...
+        def create(user=Depends(require_role("dev", "crisis_manager")), ...): ...
     """
+    allowed = set(allowed_roles)
 
     def dependency(
         user: Annotated[CurrentUser, Depends(get_current_user)],
     ) -> CurrentUser:
-        if user.role not in allowed_roles:
-            # user.role is normally a Role enum; render its value (e.g. "master")
-            # instead of "Role.MASTER". Fall back gracefully if it's a plain str.
-            role_label = getattr(user.role, "value", user.role)
+        user_role_values = {getattr(r, "value", r) for r in user.roles}
+        if not (user_role_values & allowed):
+            roles_label = ",".join(sorted(user_role_values)) or "(none)"
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"role '{role_label}' not authorized for this operation",
+                detail=(f"roles [{roles_label}] not authorized for this operation"),
             )
         return user
 

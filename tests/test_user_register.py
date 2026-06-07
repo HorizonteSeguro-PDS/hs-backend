@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 
 from dependencies.session import get_session
-from domain.models.role import Role as RoleModel
 from domain.models.user import User
+from domain.models.user_role import UserRole
 from main import app
 from tests.conftest import auth_headers
 
@@ -19,12 +19,12 @@ _VALID_PAYLOAD = {
     "name": "Carlos da Silva",
     "email": "carlos@horizonteseguro.app",
     "password": "supersecret-1234",
-    "role": "standard",
+    "roles": ["shelter_manager"],
 }
 
 
 def _session_factory(*, integrity_error: bool = False):
-    """Mock session that pretends a User got id/created_at on flush."""
+    """Mock session that stamps id/created_at on User on flush()."""
 
     def override():
         mock = MagicMock()
@@ -36,25 +36,16 @@ def _session_factory(*, integrity_error: bool = False):
                 obj.last_login_at = None
                 if obj.verified is None:
                     obj.verified = False
-            elif isinstance(obj, RoleModel):
-                obj.id = uuid.uuid4()
+            elif isinstance(obj, UserRole):
+                pass  # nothing to fill
 
         mock.add.side_effect = _add
 
         if integrity_error:
+            mock.flush.side_effect = IntegrityError("uq_users_email", None, None)
 
-            def _flush_then_raise():
-                raise IntegrityError("uq_users_email", None, None)
-
-            # First flush (after ensure_role) succeeds; second flush
-            # (after the user is added) raises. To keep this simple, just
-            # raise unconditionally — controller only flushes after the user.
-            mock.flush.side_effect = [None, IntegrityError("uq", None, None)]
-
-        # ensure_role's first lookup returns None so the path that creates
-        # the role row gets exercised.
+        # ensure no existing UserRole rows are found, so grant_role inserts
         mock.scalar.return_value = None
-
         yield mock
 
     return override
@@ -72,58 +63,125 @@ class TestRegisterUser:
         response = TestClient(app).post("/users", json=_VALID_PAYLOAD)
         assert response.status_code == 401
 
-    def test_non_master_returns_403(self):
+    def test_sheltered_cannot_create_anyone(self):
         app.dependency_overrides[get_session] = _session_factory()
         response = TestClient(app).post(
-            "/users", json=_VALID_PAYLOAD, headers=auth_headers("standard")
+            "/users", json=_VALID_PAYLOAD, headers=auth_headers("sheltered")
         )
         assert response.status_code == 403
 
-    @patch("controllers.user.hash_password", return_value="$bcrypt$fake")
-    def test_master_can_register(self, _hash):
+    def test_shelter_manager_cannot_create_another_shelter_manager(self):
         app.dependency_overrides[get_session] = _session_factory()
         response = TestClient(app).post(
-            "/users", json=_VALID_PAYLOAD, headers=auth_headers("master")
+            "/users",
+            json=_VALID_PAYLOAD,
+            headers=auth_headers("shelter_manager"),
         )
+        assert response.status_code == 403
+
+    def test_shelter_manager_can_create_sheltered(self):
+        app.dependency_overrides[get_session] = _session_factory()
+        payload = dict(_VALID_PAYLOAD, roles=["sheltered"])
+        with patch("controllers.user.hash_password", return_value="$bcrypt$fake"):
+            response = TestClient(app).post(
+                "/users", json=payload, headers=auth_headers("shelter_manager")
+            )
+        assert response.status_code == 201
+
+    def test_crisis_manager_can_create_shelter_manager(self):
+        app.dependency_overrides[get_session] = _session_factory()
+        with patch("controllers.user.hash_password", return_value="$bcrypt$fake"):
+            response = TestClient(app).post(
+                "/users", json=_VALID_PAYLOAD, headers=auth_headers("crisis_manager")
+            )
+        assert response.status_code == 201
+
+    def test_crisis_manager_cannot_create_dev(self):
+        app.dependency_overrides[get_session] = _session_factory()
+        payload = dict(_VALID_PAYLOAD, roles=["dev"])
+        response = TestClient(app).post(
+            "/users", json=payload, headers=auth_headers("crisis_manager")
+        )
+        assert response.status_code == 403
+
+    def test_dev_can_create_any_role(self):
+        app.dependency_overrides[get_session] = _session_factory()
+        with patch("controllers.user.hash_password", return_value="$bcrypt$fake"):
+            for role in ("dev", "crisis_manager", "shelter_manager", "sheltered"):
+                response = TestClient(app).post(
+                    "/users",
+                    json=dict(
+                        _VALID_PAYLOAD,
+                        email=f"{role}@horizonteseguro.app",
+                        roles=[role],
+                    ),
+                    headers=auth_headers("dev"),
+                )
+                assert response.status_code == 201, (role, response.json())
+
+    def test_dev_can_create_multi_role_user(self):
+        app.dependency_overrides[get_session] = _session_factory()
+        payload = dict(
+            _VALID_PAYLOAD,
+            email="multi@horizonteseguro.app",
+            roles=["crisis_manager", "shelter_manager"],
+        )
+        with patch("controllers.user.hash_password", return_value="$bcrypt$fake"):
+            response = TestClient(app).post(
+                "/users", json=payload, headers=auth_headers("dev")
+            )
+        assert response.status_code == 201
+        assert set(response.json()["roles"]) == {"crisis_manager", "shelter_manager"}
+
+    def test_crisis_manager_cannot_create_mixed_authorized_and_unauthorized(self):
+        """If the target role list contains ANY role the actor can't create,
+        the whole request fails (no partial creation)."""
+        app.dependency_overrides[get_session] = _session_factory()
+        payload = dict(_VALID_PAYLOAD, roles=["sheltered", "dev"])
+        response = TestClient(app).post(
+            "/users", json=payload, headers=auth_headers("crisis_manager")
+        )
+        assert response.status_code == 403
+
+    def test_password_never_in_response(self):
+        app.dependency_overrides[get_session] = _session_factory()
+        with patch("controllers.user.hash_password", return_value="$bcrypt$fake"):
+            response = TestClient(app).post(
+                "/users", json=_VALID_PAYLOAD, headers=auth_headers("dev")
+            )
         assert response.status_code == 201
         body = response.json()
-        assert body["email"] == _VALID_PAYLOAD["email"]
-        assert body["name"] == _VALID_PAYLOAD["name"]
-        assert body["role"] == "standard"
-        assert body["verified"] is False
-        assert "id" in body
-        # password must not leak
         assert "password" not in body
         assert "password_hash" not in body
 
-    @patch("controllers.user.hash_password", return_value="$bcrypt$fake")
-    def test_duplicate_email_returns_409(self, _hash):
+    def test_duplicate_email_returns_409(self):
         app.dependency_overrides[get_session] = _session_factory(integrity_error=True)
-        response = TestClient(app).post(
-            "/users", json=_VALID_PAYLOAD, headers=auth_headers("master")
-        )
+        with patch("controllers.user.hash_password", return_value="$bcrypt$fake"):
+            response = TestClient(app).post(
+                "/users", json=_VALID_PAYLOAD, headers=auth_headers("dev")
+            )
         assert response.status_code == 409
 
     def test_invalid_email_returns_422(self):
         app.dependency_overrides[get_session] = _session_factory()
         bad = dict(_VALID_PAYLOAD, email="not-an-email")
-        response = TestClient(app).post(
-            "/users", json=bad, headers=auth_headers("master")
-        )
+        response = TestClient(app).post("/users", json=bad, headers=auth_headers("dev"))
         assert response.status_code == 422
 
     def test_short_password_returns_422(self):
         app.dependency_overrides[get_session] = _session_factory()
         bad = dict(_VALID_PAYLOAD, password="short")
-        response = TestClient(app).post(
-            "/users", json=bad, headers=auth_headers("master")
-        )
+        response = TestClient(app).post("/users", json=bad, headers=auth_headers("dev"))
         assert response.status_code == 422
 
     def test_invalid_role_returns_422(self):
         app.dependency_overrides[get_session] = _session_factory()
-        bad = dict(_VALID_PAYLOAD, role="superuser")
-        response = TestClient(app).post(
-            "/users", json=bad, headers=auth_headers("master")
-        )
+        bad = dict(_VALID_PAYLOAD, roles=["superuser"])
+        response = TestClient(app).post("/users", json=bad, headers=auth_headers("dev"))
+        assert response.status_code == 422
+
+    def test_empty_roles_returns_422(self):
+        app.dependency_overrides[get_session] = _session_factory()
+        bad = dict(_VALID_PAYLOAD, roles=[])
+        response = TestClient(app).post("/users", json=bad, headers=auth_headers("dev"))
         assert response.status_code == 422
