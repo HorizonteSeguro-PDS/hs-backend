@@ -36,9 +36,9 @@ def login(payload: LoginRequest, session: _SessionDep) -> LoginResponse:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid credentials",
         )
-    user, role = result
+    user, roles = result
 
-    token, expires_in = create_access_token(user_id=user.id, role=role)
+    token, expires_in = create_access_token(user_id=user.id, roles=roles)
 
     user.last_login_at = datetime.now(timezone.utc)
 
@@ -62,7 +62,7 @@ def login(payload: LoginRequest, session: _SessionDep) -> LoginResponse:
             id=user.id,
             name=user.name,
             email=user.email,
-            role=role,
+            roles=roles,
             organization_id=user.organization_id,
             phone=user.phone,
             verified=user.verified,

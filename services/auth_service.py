@@ -1,4 +1,4 @@
-"""Authentication services: password hashing, JWT minting, role resolution."""
+"""Authentication services: password hashing, JWT minting, role grants."""
 
 from datetime import datetime, timezone
 from uuid import UUID
@@ -10,9 +10,11 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from domain.auth.enums import Role
-from domain.models.role import Role as RoleModel
 from domain.models.user import User
-from domain.schemas.enums import RoleScope
+from domain.models.user_role import UserRole
+
+
+# --- crypto --- #
 
 
 def hash_password(plain: str) -> str:
@@ -31,64 +33,97 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(*, user_id: UUID, role: Role) -> tuple[str, int]:
+# --- JWT --- #
+
+
+def create_access_token(*, user_id: UUID, roles: list[Role]) -> tuple[str, int]:
     """
     Mint a JWT for a user. Returns (token, expires_in_seconds).
 
-    The `sub` claim carries the user id and the `role` claim carries the role
-    string — same shape that `decode_jwt` already expects.
+    The `sub` claim carries the user id and the `roles` claim carries the
+    list of role strings — same shape that `decode_jwt` expects.
     """
     expires_in = settings.jwt_expires_hours * 3600
     payload = {
         "sub": str(user_id),
-        "role": role.value,
+        "roles": [r.value for r in roles],
         "exp": int(datetime.now(timezone.utc).timestamp()) + expires_in,
     }
     token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return token, expires_in
 
 
-def ensure_role(session: Session, role: Role) -> RoleModel:
-    """
-    Get-or-create the row in `roles` that corresponds to the given Role enum.
+# --- roles --- #
 
-    Idempotent: safe to call on every registration. The roles table is shared
-    across the system so we use the enum value as the canonical `name`.
-    Does NOT commit — caller controls the transaction.
+
+def get_user_roles(session: Session, user_id: UUID) -> list[Role]:
+    """Return the roles assigned to a user, ordered deterministically."""
+    rows = session.scalars(
+        select(UserRole.role).where(UserRole.user_id == user_id)
+    ).all()
+    roles: list[Role] = []
+    for row in rows:
+        try:
+            roles.append(row if isinstance(row, Role) else Role(row))
+        except ValueError:
+            continue
+    return sorted(roles, key=lambda r: r.value)
+
+
+def grant_role(session: Session, *, user_id: UUID, role: Role) -> None:
     """
-    existing = session.scalar(select(RoleModel).where(RoleModel.name == role.value))
+    Grant a single role to a user. Idempotent — duplicates are skipped via PK.
+
+    Does NOT commit; caller controls the transaction.
+    """
+    existing = session.scalar(
+        select(UserRole).where(UserRole.user_id == user_id, UserRole.role == role)
+    )
     if existing is not None:
-        return existing
-
-    new_role = RoleModel(name=role.value, scope=RoleScope.GLOBAL, permissions=None)
-    session.add(new_role)
+        return
+    session.add(UserRole(user_id=user_id, role=role))
     session.flush()
-    return new_role
+
+
+# --- permissions matrix --- #
+
+_CREATE_RULES: dict[Role, set[Role]] = {
+    Role.DEV: {Role.DEV, Role.CRISIS_MANAGER, Role.SHELTER_MANAGER, Role.SHELTERED},
+    Role.CRISIS_MANAGER: {Role.SHELTER_MANAGER, Role.SHELTERED},
+    Role.SHELTER_MANAGER: {Role.SHELTERED},
+    Role.SHELTERED: set(),
+}
+
+
+def can_create_role(actor_roles: list[Role] | set[Role], target_role: Role) -> bool:
+    """Return True if any of `actor_roles` is authorized to create `target_role`."""
+    return any(target_role in _CREATE_RULES.get(role, set()) for role in actor_roles)
+
+
+def can_create_roles(
+    actor_roles: list[Role] | set[Role], target_roles: list[Role] | set[Role]
+) -> bool:
+    """Return True if `actor_roles` can create every role in `target_roles`."""
+    return all(can_create_role(actor_roles, r) for r in target_roles)
+
+
+# --- authentication --- #
 
 
 def authenticate(
     session: Session, *, email: str, password: str
-) -> tuple[User, Role] | None:
+) -> tuple[User, list[Role]] | None:
     """
-    Verify credentials and resolve the user's role enum.
+    Verify credentials and resolve the user's roles.
 
-    Returns (user, role) on success, None otherwise. Returns None for both
+    Returns (user, roles) on success, None otherwise. Returns None for both
     unknown email and bad password — same error surfaced to the client to
     avoid leaking which emails are registered.
     """
-    row = session.execute(
-        select(User, RoleModel.name)
-        .join(RoleModel, RoleModel.id == User.role_id)
-        .where(User.email == email)
-    ).first()
-    if row is None:
+    user = session.scalar(select(User).where(User.email == email))
+    if user is None:
         return None
-    user, role_name = row
     if not verify_password(password, user.password_hash):
         return None
-    try:
-        role = Role(role_name)
-    except ValueError:
-        # Role in DB does not match any enum — should never happen in practice.
-        return None
-    return user, role
+    roles = get_user_roles(session, user.id)
+    return user, roles
