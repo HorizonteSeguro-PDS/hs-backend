@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from domain.crisis.enums import CrisisStatus, CrisisType
+from domain.shelter.schemas import ShelterSummaryResponse
 
 
 class CrisisBase(BaseModel):
@@ -68,3 +69,7 @@ class CrisisListItemResponse(BaseModel):
     severity_initial: int | None = None
     severity_calculated: int | None = None
     created_at: datetime
+
+
+class CrisisDetailResponse(CrisisRead):
+    shelters: list[ShelterSummaryResponse] = Field(default_factory=list)

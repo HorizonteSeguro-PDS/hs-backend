@@ -1,0 +1,2 @@
+"""Shelter domain package."""
+
