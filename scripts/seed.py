@@ -383,10 +383,23 @@ def link_crises_shelters(
     crises_by_name = {c.name: c for c in crises}
     shelters_by_name = {s.name: s for s in shelters}
     linked = 0
+
     for crisis_name, shelter_names in CRISIS_SHELTER_LINKS.items():
-        crisis = crises_by_name[crisis_name]
+        crisis = crises_by_name.get(crisis_name)
+        if crisis is None:
+            raise RuntimeError(
+                f"Seed link references unknown crisis: {crisis_name!r}. "
+                "Check CRISIS_SHELTER_LINKS and CRISES_SPEC."
+            )
+
         for shelter_name in shelter_names:
-            shelter = shelters_by_name[shelter_name]
+            shelter = shelters_by_name.get(shelter_name)
+            if shelter is None:
+                raise RuntimeError(
+                    f"Seed link references unknown shelter: {shelter_name!r}. "
+                    "Check CRISIS_SHELTER_LINKS and SHELTERS_SPEC."
+                )
+
             existing = session.scalar(
                 select(CrisesShelters).where(
                     CrisesShelters.crisis_id == crisis.id,
@@ -395,6 +408,7 @@ def link_crises_shelters(
             )
             if existing is not None:
                 continue
+
             session.add(
                 CrisesShelters(
                     crisis_id=crisis.id,
@@ -402,11 +416,11 @@ def link_crises_shelters(
                 )
             )
             linked += 1
+
     if linked:
         print(f"[seed] linked {linked} crisis/shelter pairs.")
     else:
         print("[seed] all crisis/shelter links already exist.")
-
 
 def print_credentials(users: dict[str, tuple[User, list[Role]]]) -> None:
     print()
