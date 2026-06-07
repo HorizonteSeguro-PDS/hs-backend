@@ -17,10 +17,14 @@ from services.audit_service import audit_event
 
 router = APIRouter(prefix="/crises", tags=["crises"])
 
+# Reads are open to any authenticated role (scope filtering will come in a
+# follow-up story — see PHS-XX). Writes are gated to dev and crisis_manager;
+# shelter_manager / sheltered cannot create or mutate crises.
 _ReadDep = Annotated[
-    CurrentUser, Depends(require_role("master", "standard", "oversight"))
+    CurrentUser,
+    Depends(require_role("dev", "crisis_manager", "shelter_manager", "sheltered")),
 ]
-_WriteDep = Annotated[CurrentUser, Depends(require_role("master", "standard"))]
+_WriteDep = Annotated[CurrentUser, Depends(require_role("dev", "crisis_manager"))]
 _SessionDep = Annotated[Session, Depends(get_session)]
 
 

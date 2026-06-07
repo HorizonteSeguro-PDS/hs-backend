@@ -10,15 +10,26 @@ from domain.auth.enums import Role
 @dataclass
 class CurrentUser:
     id: UUID
-    role: Role
+    roles: list[Role]
 
 
 def decode_jwt(token: str) -> CurrentUser:
+    """
+    Decode the JWT and return the resolved user identity.
+
+    The payload is expected to contain:
+      - sub:   user id as string UUID
+      - roles: list of role names (strings) — see Role enum
+      - exp:   expiration epoch (validated by jose)
+    """
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
+        raw_roles = payload["roles"]
+        if not isinstance(raw_roles, list):
+            raise ValueError("'roles' claim must be a list")
         return CurrentUser(
             id=UUID(payload["sub"]),
-            role=Role(payload["role"]),
+            roles=[Role(r) for r in raw_roles],
         )
     except (JWTError, KeyError, ValueError) as e:
         raise ValueError(f"invalid token: {e}")
