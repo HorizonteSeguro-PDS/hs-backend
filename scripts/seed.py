@@ -2,16 +2,15 @@
 
 Usage:
     python scripts/seed.py
-
-Idempotent: re-running skips rows that already exist (matched by email for
-users and by name for crises). Use `--reset` to wipe seeded rows first.
+    python scripts/seed.py --reset   # delete seeded rows first
 
 Creates:
-  - 3 test users (one per role) with bcrypt-hashed passwords
-  - 5 sample crises authored by the standard test user
+  - 3 users — one per role (master / standard / oversight) — all under
+    @horizonteseguro.app and sharing the password `admin1234`
+  - 5 sample crises authored by the master user
 
-Then prints fresh JWTs for each role so you can paste straight into Swagger
-without going through POST /auth/login.
+Idempotent: re-running skips rows that already exist (matched by email for
+users and by name for crises). Use --reset to wipe the seeded rows first.
 """
 
 import argparse
@@ -34,23 +33,23 @@ from services.auth_service import (  # noqa: E402
 )
 from utils.database import SessionLocal  # noqa: E402
 
-TEST_PASSWORD = "test1234"  # shared by all 3 seeded users — dev only
+DEFAULT_PASSWORD = "admin1234"
 
-TEST_USERS_SPEC = [
+USERS_SPEC = [
     {
-        "email": "master@test.local",
-        "name": "Master Tester",
         "role": Role.MASTER,
+        "email": "admin@horizonteseguro.app",
+        "name": "Admin",
     },
     {
-        "email": "standard@test.local",
-        "name": "Standard Tester",
         "role": Role.STANDARD,
+        "email": "standard@horizonteseguro.app",
+        "name": "Standard Tester",
     },
     {
-        "email": "oversight@test.local",
-        "name": "Oversight Tester",
         "role": Role.OVERSIGHT,
+        "email": "oversight@horizonteseguro.app",
+        "name": "Oversight Tester",
     },
 ]
 
@@ -98,7 +97,7 @@ CRISES_SPEC = [
     },
 ]
 
-SEEDED_USER_EMAILS = [u["email"] for u in TEST_USERS_SPEC]
+SEEDED_USER_EMAILS = [u["email"] for u in USERS_SPEC]
 SEEDED_CRISIS_NAMES = [c["name"] for c in CRISES_SPEC]
 
 
@@ -113,7 +112,7 @@ def reset(session) -> None:
 def seed_users(session) -> dict[Role, User]:
     """Get-or-create test users keyed by role. Returns {role: user}."""
     by_role: dict[Role, User] = {}
-    for spec in TEST_USERS_SPEC:
+    for spec in USERS_SPEC:
         existing = session.scalar(select(User).where(User.email == spec["email"]))
         if existing is not None:
             print(f"[seed] user {spec['email']} already exists.")
@@ -127,7 +126,7 @@ def seed_users(session) -> dict[Role, User]:
             name=spec["name"],
             email=spec["email"],
             phone=None,
-            password_hash=hash_password(TEST_PASSWORD),
+            password_hash=hash_password(DEFAULT_PASSWORD),
             verified=True,
         )
         session.add(user)
@@ -149,20 +148,25 @@ def seed_crises(session, *, author_id) -> int:
     return inserted
 
 
-def print_jwts(users: dict[Role, User]) -> None:
-    print("\n=== JWTs de teste (validos por 24h) ===")
-    print(f"Senha de todos os usuarios seeded: {TEST_PASSWORD}\n")
+def print_credentials(users: dict[Role, User]) -> None:
+    print()
+    print("=== Usuarios seeded ===")
+    print(f"Senha (para todos): {DEFAULT_PASSWORD}")
+    print("Se a senha nao funcionar, rode o seed com --reset.\n")
+    print("=== JWTs (validos por 24h) ===")
     for role in (Role.MASTER, Role.STANDARD, Role.OVERSIGHT):
         user = users.get(role)
         if user is None:
             continue
         token, _ = create_access_token(user_id=user.id, role=role)
-        print(f"[{role.value}]")
+        print(f"\n[{role.value}]")
         print(f"  email:   {user.email}")
         print(f"  user_id: {user.id}")
-        print(f"  token:   {token}\n")
-    print("Uso: clica em 'Authorize' no Swagger (/api/docs) e cola: Bearer <token>")
-    print("Ou faz POST /auth/login com email + senha pra obter um token novo.")
+        print(f"  token:   {token}")
+    print()
+    print("Uso:")
+    print("  - Cola o JWT em 'Authorize' no Swagger (/api/docs): Bearer <token>")
+    print("  - Ou faz POST /auth/login com email+senha pra obter um token novo")
 
 
 def run(reset_first: bool) -> int:
@@ -173,19 +177,19 @@ def run(reset_first: bool) -> int:
         users = seed_users(session)
         session.commit()
 
-        author = users.get(Role.STANDARD)
-        if author is None:
-            print("[seed] ERROR: standard user not available to author crises.")
+        master = users.get(Role.MASTER)
+        if master is None:
+            print("[seed] ERROR: master user not available to author crises.")
             return 1
 
-        inserted = seed_crises(session, author_id=author.id)
+        inserted = seed_crises(session, author_id=master.id)
         session.commit()
         if inserted:
             print(f"[seed] {inserted} new crises created.")
         else:
             print("[seed] all sample crises already exist.")
 
-        print_jwts(users)
+        print_credentials(users)
     return 0
 
 

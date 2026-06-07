@@ -19,7 +19,7 @@ def _user(role: Role = Role.STANDARD) -> User:
         role_id=uuid.uuid4(),
         organization_id=None,
         name="Test User",
-        email="test@example.com",
+        email="test@horizonteseguro.app",
         phone=None,
         password_hash="$bcrypt$fake",
         verified=True,
@@ -55,14 +55,14 @@ class TestLogin:
 
         response = TestClient(app).post(
             "/auth/login",
-            json={"email": "test@example.com", "password": "supersecret-1234"},
+            json={"email": "test@horizonteseguro.app", "password": "supersecret-1234"},
         )
         assert response.status_code == 200
         body = response.json()
         assert body["access_token"] == "fake.jwt.token"
         assert body["token_type"] == "bearer"
         assert body["expires_in"] == 86400
-        assert body["user"]["email"] == "test@example.com"
+        assert body["user"]["email"] == "test@horizonteseguro.app"
         assert body["user"]["role"] == "standard"
         # password must never appear in the response
         assert "password" not in body["user"]
@@ -73,7 +73,7 @@ class TestLogin:
         app.dependency_overrides[get_session] = _session()
         response = TestClient(app).post(
             "/auth/login",
-            json={"email": "test@example.com", "password": "wrong-password"},
+            json={"email": "test@horizonteseguro.app", "password": "wrong-password"},
         )
         assert response.status_code == 401
         assert response.json()["detail"] == "invalid credentials"
@@ -84,7 +84,7 @@ class TestLogin:
         app.dependency_overrides[get_session] = _session()
         response = TestClient(app).post(
             "/auth/login",
-            json={"email": "nobody@example.com", "password": "anything"},
+            json={"email": "nobody@horizonteseguro.app", "password": "anything"},
         )
         assert response.status_code == 401
         assert response.json()["detail"] == "invalid credentials"
