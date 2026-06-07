@@ -9,7 +9,6 @@ from domain.schemas.enums import ShelterStatus, ShelterType
 class ShelterBase(BaseModel):
     organization_id: UUID | None = None
     responsible_user_id: UUID
-    created_by: UUID
     verified_by: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     address: str = Field(min_length=1, max_length=255)
@@ -50,6 +49,7 @@ class ShelterRead(ShelterBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+    created_by: UUID
     created_at: datetime
     updated_at: datetime
 

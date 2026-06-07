@@ -21,7 +21,6 @@ def _valid_shelter_payload() -> dict:
     return {
         "organization_id": uuid.uuid4(),
         "responsible_user_id": uuid.uuid4(),
-        "created_by": uuid.uuid4(),
         "verified_by": None,
         "name": "Abrigo Central",
         "address": "Rua Principal, 100",
@@ -43,6 +42,7 @@ def test_shelter_create_accepts_valid_data():
     assert shelter.name == payload["name"]
     assert shelter.occupation == 25
     assert shelter.capacity == 100
+    assert "created_by" not in shelter.model_dump()
 
 
 def test_shelter_create_rejects_occupation_above_capacity():
@@ -66,6 +66,7 @@ def test_shelter_read_serializes_from_attributes_without_crisis_id():
     shelter = SimpleNamespace(
         id=uuid.uuid4(),
         **_valid_shelter_payload(),
+        created_by=uuid.uuid4(),
         created_at=_NOW,
         updated_at=_NOW,
         crisis_id=uuid.uuid4(),
@@ -90,6 +91,7 @@ def test_shelter_list_and_summary_responses_are_limited():
     shelter = SimpleNamespace(
         id=uuid.uuid4(),
         **_valid_shelter_payload(),
+        created_by=uuid.uuid4(),
         created_at=_NOW,
         updated_at=_NOW,
         crisis_id=uuid.uuid4(),
