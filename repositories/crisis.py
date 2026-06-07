@@ -31,7 +31,9 @@ class CrisisRepository(BaseRepository[Crisis]):
         type_: CrisisType | None = None,
     ) -> tuple[list[CrisisListRow], int]:
         stmt = (
-            select(Crisis, func.count(CrisesShelters.shelter_id).label("shelters_count"))
+            select(
+                Crisis, func.count(CrisesShelters.shelter_id).label("shelters_count")
+            )
             .outerjoin(CrisesShelters, CrisesShelters.crisis_id == Crisis.id)
             .group_by(Crisis.id)
             .order_by(Crisis.created_at.desc())

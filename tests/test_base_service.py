@@ -84,7 +84,9 @@ def test_base_service_create_update_and_delete_without_commit():
         assert service.get(crisis.id) == crisis
         assert session.in_transaction()
 
-        updated = service.update(crisis.id, {"name": "Incendio Teste", "city": "Recife"})
+        updated = service.update(
+            crisis.id, {"name": "Incendio Teste", "city": "Recife"}
+        )
 
         assert updated.name == "Incendio Teste"
         assert updated.city == "Recife"
