@@ -422,6 +422,7 @@ def link_crises_shelters(
     else:
         print("[seed] all crisis/shelter links already exist.")
 
+
 def print_credentials(users: dict[str, tuple[User, list[Role]]]) -> None:
     print()
     print("=== Usuarios seeded ===")
