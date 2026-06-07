@@ -2,11 +2,12 @@ from uuid import UUID
 
 from domain.models.shelter import Shelter
 from domain.shelter.schemas import (
-    ShelterCreate,
+    ShelterCreateRequest,
     ShelterListItemResponse,
     ShelterRead,
-    ShelterUpdate,
+    ShelterUpdateRequest,
 )
+from domain.schemas.enums import ShelterStatus
 from repositories import ShelterRepository
 from schemas.pagination import Page, PaginationParams
 from services.base import BaseService
@@ -34,14 +35,22 @@ class ShelterService(BaseService[Shelter]):
 
     def create_shelter(
         self,
-        payload: ShelterCreate,
+        payload: ShelterCreateRequest,
         *,
         created_by: UUID,
     ) -> Shelter:
-        shelter = Shelter(**payload.model_dump(), created_by=created_by)
+        shelter = Shelter(
+            **payload.model_dump(),
+            organization_id=None,
+            responsible_user_id=created_by,
+            created_by=created_by,
+            verified_by=None,
+            status=ShelterStatus.PREPARING,
+            verified=False,
+        )
         return self.create(shelter)
 
-    def update_shelter(self, shelter_id: UUID, payload: ShelterUpdate) -> Shelter:
+    def update_shelter(self, shelter_id: UUID, payload: ShelterUpdateRequest) -> Shelter:
         return self.update(shelter_id, payload.model_dump(exclude_unset=True))
 
     def delete_shelter(self, shelter_id: UUID) -> None:
