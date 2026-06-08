@@ -1,23 +1,30 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 from domain.crisis.enums import CrisisStatus, CrisisType
-from domain.crisis.schemas import CrisisDetailResponse, CrisisListItemResponse
+from domain.crisis.schemas import (
+    CrisisCreate,
+    CrisisDetailResponse,
+    CrisisListItemResponse,
+)
 from domain.schemas.enums import BrazilianState, ShelterStatus
 
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 def test_crisis_list_item_response_is_limited_to_listing_fields():
+    organization_id = uuid.uuid4()
     crisis = SimpleNamespace(
         id=uuid.uuid4(),
+        organization_id=organization_id,
         name="Enchente Teste",
         type=CrisisType.FLOOD,
         description="Detalhe interno",
         status=CrisisStatus.ACTIVE,
         state="SP",
         city="Sao Paulo",
+        start_date=date(2024, 1, 1),
         severity_initial=3,
         severity_calculated=None,
         severity_calculated_at=None,
@@ -33,11 +40,13 @@ def test_crisis_list_item_response_is_limited_to_listing_fields():
 
     assert set(payload) == {
         "id",
+        "organization_id",
         "name",
         "type",
         "status",
         "state",
         "city",
+        "start_date",
         "severity_initial",
         "severity_calculated",
         "created_at",
@@ -45,7 +54,31 @@ def test_crisis_list_item_response_is_limited_to_listing_fields():
     }
     assert "created_by" not in payload
     assert "close_reason" not in payload
+    assert payload["organization_id"] == organization_id
+    assert payload["start_date"] == date(2024, 1, 1)
     assert payload["shelters_count"] == 2
+
+
+def test_crisis_create_accepts_modal_payload_aliases():
+    organization_id = uuid.uuid4()
+
+    crisis = CrisisCreate(
+        name="Sao Paulo Crisis",
+        severity="ALTA",
+        state="Sao Paulo",
+        city="Sao Paulo",
+        start_date="2024-01-01",
+        status="ATIVA",
+        type="FLOOD",
+        organization_id=organization_id,
+    )
+
+    assert crisis.organization_id == organization_id
+    assert crisis.severity_initial == 4
+    assert crisis.state == "SP"
+    assert crisis.start_date == date(2024, 1, 1)
+    assert crisis.status == CrisisStatus.ACTIVE
+    assert crisis.type == CrisisType.FLOOD
 
 
 def test_crisis_detail_response_uses_shelter_summary_without_recursion():
@@ -62,12 +95,14 @@ def test_crisis_detail_response_uses_shelter_summary_without_recursion():
     )
     crisis = SimpleNamespace(
         id=uuid.uuid4(),
+        organization_id=None,
         name="Enchente Teste",
         type=CrisisType.FLOOD,
         description=None,
         status=CrisisStatus.ACTIVE,
         state="SP",
         city="Sao Paulo",
+        start_date=None,
         severity_initial=3,
         severity_calculated=None,
         severity_calculated_at=None,

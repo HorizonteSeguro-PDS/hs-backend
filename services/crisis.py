@@ -45,11 +45,13 @@ class CrisisService(BaseService[Crisis]):
         return CrisisListItemResponse.model_validate(
             {
                 "id": row.crisis.id,
+                "organization_id": row.crisis.organization_id,
                 "name": row.crisis.name,
                 "type": row.crisis.type,
                 "status": row.crisis.status,
                 "state": row.crisis.state,
                 "city": row.crisis.city,
+                "start_date": row.crisis.start_date,
                 "severity_initial": row.crisis.severity_initial,
                 "severity_calculated": row.crisis.severity_calculated,
                 "created_at": row.crisis.created_at,

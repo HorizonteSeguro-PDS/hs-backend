@@ -109,6 +109,33 @@ class TestCreateCrisis:
         assert body["type"] == "flood"
         assert "id" in body
 
+    def test_create_accepts_modal_payload_aliases(self):
+        organization_id = uuid.uuid4()
+        app.dependency_overrides[get_session] = _session_for_create()
+        response = TestClient(app).post(
+            "/crises",
+            json={
+                "name": "Sao Paulo Crisis",
+                "severity": "ALTA",
+                "state": "Sao Paulo",
+                "city": "Sao Paulo",
+                "start_date": "2024-01-01",
+                "status": "ATIVA",
+                "type": "FLOOD",
+                "organization_id": str(organization_id),
+            },
+            headers=auth_headers("dev"),
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["organization_id"] == str(organization_id)
+        assert body["severity_initial"] == 4
+        assert body["state"] == "SP"
+        assert body["start_date"] == "2024-01-01"
+        assert body["status"] == "active"
+        assert body["type"] == "flood"
+
     def test_create_as_shelter_manager_returns_403(self):
         app.dependency_overrides[get_session] = _session_for_create()
         response = TestClient(app).post(

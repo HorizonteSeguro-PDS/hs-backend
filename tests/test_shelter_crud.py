@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 
 from dependencies.session import get_session
+from domain.models.crises_shelters import CrisesShelters
 from domain.models.shelter import Shelter
 from domain.schemas.enums import ShelterStatus, ShelterType
 from main import app
@@ -214,6 +215,45 @@ class TestCreateShelter:
 
         assert response.status_code == 201
 
+    def test_create_accepts_modal_scope_fields_and_default_shelter_type(self):
+        organization_id = uuid.uuid4()
+        crisis_id = uuid.uuid4()
+        added = []
+
+        def override():
+            mock = MagicMock()
+
+            def _add(obj):
+                added.append(obj)
+                if isinstance(obj, Shelter):
+                    obj.id = uuid.uuid4()
+                    obj.created_at = _NOW
+                    obj.updated_at = _NOW
+
+            mock.add.side_effect = _add
+            yield mock
+
+        payload = _shelter_payload()
+        payload.pop("shelter_type")
+        payload["organization_id"] = str(organization_id)
+        payload["crisis_id"] = str(crisis_id)
+
+        app.dependency_overrides[get_session] = override
+        response = TestClient(app).post(
+            "/shelters",
+            json=payload,
+            headers=auth_headers("dev"),
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["organization_id"] == str(organization_id)
+        assert body["shelter_type"] == "institutional"
+        assert any(
+            isinstance(obj, CrisesShelters) and obj.crisis_id == crisis_id
+            for obj in added
+        )
+
     def test_create_rejects_administrative_fields(self):
         payload = {
             **_shelter_payload(),
@@ -222,7 +262,6 @@ class TestCreateShelter:
             "verified_by": str(uuid.uuid4()),
             "status": "active",
             "verified": True,
-            "crisis_id": str(uuid.uuid4()),
         }
         app.dependency_overrides[get_session] = _session_for_create()
         response = TestClient(app).post(

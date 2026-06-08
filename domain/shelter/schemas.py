@@ -41,6 +41,8 @@ class ShelterCreate(ShelterBase):
 class ShelterCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    organization_id: UUID | None = None
+    crisis_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     email: EmailStr | None = None
     phone: str | None = Field(default=None, max_length=32)
@@ -55,7 +57,7 @@ class ShelterCreateRequest(BaseModel):
     entry_requirements: str | None = Field(default=None, max_length=1000)
     attended_special_needs: str | None = Field(default=None, max_length=1000)
     occupation: int = Field(default=0, ge=0)
-    shelter_type: ShelterType
+    shelter_type: ShelterType = ShelterType.INSTITUTIONAL
     bio: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")

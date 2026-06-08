@@ -82,7 +82,22 @@ def test_shelter_create_request_exposes_only_public_fields():
 
     shelter = ShelterCreateRequest(**payload)
 
-    assert shelter.model_dump() == payload
+    assert shelter.model_dump(exclude_none=True) == payload
+
+
+def test_shelter_create_request_accepts_crisis_and_organization_ids():
+    organization_id = uuid.uuid4()
+    crisis_id = uuid.uuid4()
+    payload = {
+        **_valid_create_request_payload(),
+        "organization_id": organization_id,
+        "crisis_id": crisis_id,
+    }
+
+    shelter = ShelterCreateRequest(**payload)
+
+    assert shelter.organization_id == organization_id
+    assert shelter.crisis_id == crisis_id
 
 
 def test_shelter_create_request_rejects_administrative_fields():
@@ -93,7 +108,6 @@ def test_shelter_create_request_rejects_administrative_fields():
         "verified_by": uuid.uuid4(),
         "verified": True,
         "status": ShelterStatus.ACTIVE,
-        "crisis_id": uuid.uuid4(),
     }
 
     with pytest.raises(ValidationError):
