@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import VARCHAR, Boolean, Enum as PgEnum, Float, Index, Integer, func, String
+from sqlalchemy import (
+    VARCHAR,
+    Boolean,
+    Enum as PgEnum,
+    Float,
+    Index,
+    Integer,
+    func,
+    String,
+)
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
