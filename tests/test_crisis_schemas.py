@@ -81,6 +81,18 @@ def test_crisis_create_accepts_modal_payload_aliases():
     assert crisis.type == CrisisType.FLOOD
 
 
+def test_crisis_create_strips_type_and_uppercases_uf():
+    crisis = CrisisCreate(
+        name="Enchente Teste",
+        type=" FLOOD ",
+        state="sp",
+        city="Sao Paulo",
+    )
+
+    assert crisis.type == CrisisType.FLOOD
+    assert crisis.state == "SP"
+
+
 def test_crisis_detail_response_uses_shelter_summary_without_recursion():
     shelter = SimpleNamespace(
         id=uuid.uuid4(),
