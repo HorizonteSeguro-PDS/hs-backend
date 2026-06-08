@@ -63,6 +63,7 @@ class Shelter(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_requirements: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
     occupation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     shelter_type: Mapped[ShelterType] = mapped_column(shelter_type_pg, nullable=False)
     status: Mapped[ShelterStatus] = mapped_column(
