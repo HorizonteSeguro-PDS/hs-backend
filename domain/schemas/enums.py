@@ -22,6 +22,31 @@ class ResourceUnit(str, Enum):
     REAL = "real"
 
 
+class MovementDirection(str, Enum):
+    """Whether an inventory movement is an entry or exit.
+
+    Mirrors the `movement_direction` Postgres enum defined in migration 0015.
+    """
+
+    IN = "in"
+    OUT = "out"
+
+
+class MovementReason(str, Enum):
+    """Reason that justifies an inventory movement.
+
+    Mirrors the `movement_reason` Postgres enum defined in migration 0015.
+    """
+
+    DONATION = "donation"  # entrada de doacao externa
+    DISTRIBUTION = "distribution"  # saida pra beneficiarios
+    TRANSFER_IN = "transfer_in"  # entrada vinda de outro abrigo
+    TRANSFER_OUT = "transfer_out"  # saida pra outro abrigo
+    ADJUSTMENT = "adjustment"  # ajuste de inventario (correcao)
+    EXPIRED = "expired"  # saida por validade vencida
+    OTHER = "other"
+
+
 class OrganizationType(str, Enum):
     CRISIS_MANAGER = "crisis_manager"
     SHELTER_OPERATOR = "shelter_operator"
