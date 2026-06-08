@@ -41,7 +41,6 @@ class ShelterCreate(ShelterBase):
 class ShelterCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    organization_id: UUID | None = None
     crisis_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     email: EmailStr | None = None

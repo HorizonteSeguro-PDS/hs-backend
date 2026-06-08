@@ -14,9 +14,9 @@ from main import app
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
-def _user() -> User:
+def _user(organization_id: uuid.UUID | None = None) -> User:
     u = User(
-        organization_id=None,
+        organization_id=organization_id,
         name="Test User",
         email="test@horizonteseguro.app",
         phone=None,
@@ -48,7 +48,8 @@ class TestLogin:
         "controllers.auth.create_access_token", return_value=("fake.jwt.token", 86400)
     )
     def test_valid_credentials_returns_token(self, _mint, mock_auth):
-        user = _user()
+        organization_id = uuid.uuid4()
+        user = _user(organization_id=organization_id)
         mock_auth.return_value = (user, [Role.CRISIS_MANAGER])
         app.dependency_overrides[get_session] = _session()
 
@@ -63,8 +64,14 @@ class TestLogin:
         assert body["expires_in"] == 86400
         assert body["user"]["email"] == "test@horizonteseguro.app"
         assert body["user"]["roles"] == ["crisis_manager"]
+        assert body["user"]["organization_id"] == str(organization_id)
         assert "password" not in body["user"]
         assert "password_hash" not in body["user"]
+        _mint.assert_called_once_with(
+            user_id=user.id,
+            roles=[Role.CRISIS_MANAGER],
+            organization_id=organization_id,
+        )
 
     @patch("controllers.auth.authenticate")
     @patch(

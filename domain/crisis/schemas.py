@@ -39,7 +39,8 @@ _STATE_NAMES = {
 
 
 class CrisisBase(BaseModel):
-    organization_id: UUID | None = None
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(min_length=1, max_length=200)
     type: CrisisType
     description: str | None = None

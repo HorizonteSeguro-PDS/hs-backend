@@ -58,7 +58,11 @@ def create_shelter(
     user: _WriteDep,
 ) -> ShelterRead:
     service = ShelterService(ShelterRepository(session))
-    shelter = service.create_shelter(payload, created_by=user.id)
+    shelter = service.create_shelter(
+        payload,
+        created_by=user.id,
+        organization_id=user.organization_id,
+    )
     session.commit()
     session.refresh(shelter)
     return shelter

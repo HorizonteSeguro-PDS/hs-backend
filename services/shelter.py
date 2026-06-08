@@ -39,10 +39,12 @@ class ShelterService(BaseService[Shelter]):
         payload: ShelterCreateRequest,
         *,
         created_by: UUID,
+        organization_id: UUID | None,
     ) -> Shelter:
         data = payload.model_dump(exclude={"crisis_id"})
         shelter = Shelter(
             **data,
+            organization_id=organization_id,
             responsible_user_id=created_by,
             created_by=created_by,
             verified_by=None,

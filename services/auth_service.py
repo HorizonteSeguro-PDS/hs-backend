@@ -36,7 +36,12 @@ def verify_password(plain: str, hashed: str) -> bool:
 # --- JWT --- #
 
 
-def create_access_token(*, user_id: UUID, roles: list[Role]) -> tuple[str, int]:
+def create_access_token(
+    *,
+    user_id: UUID,
+    roles: list[Role],
+    organization_id: UUID | None = None,
+) -> tuple[str, int]:
     """
     Mint a JWT for a user. Returns (token, expires_in_seconds).
 
@@ -49,6 +54,8 @@ def create_access_token(*, user_id: UUID, roles: list[Role]) -> tuple[str, int]:
         "roles": [r.value for r in roles],
         "exp": int(datetime.now(timezone.utc).timestamp()) + expires_in,
     }
+    if organization_id is not None:
+        payload["organization_id"] = str(organization_id)
     token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
     return token, expires_in
 

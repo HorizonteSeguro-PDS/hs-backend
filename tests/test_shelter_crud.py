@@ -235,14 +235,13 @@ class TestCreateShelter:
 
         payload = _shelter_payload()
         payload.pop("shelter_type")
-        payload["organization_id"] = str(organization_id)
         payload["crisis_id"] = str(crisis_id)
 
         app.dependency_overrides[get_session] = override
         response = TestClient(app).post(
             "/shelters",
             json=payload,
-            headers=auth_headers("dev"),
+            headers=auth_headers("dev", organization_id=organization_id),
         )
 
         assert response.status_code == 201
@@ -253,6 +252,18 @@ class TestCreateShelter:
             isinstance(obj, CrisesShelters) and obj.crisis_id == crisis_id
             for obj in added
         )
+
+    def test_create_rejects_organization_id_in_body(self):
+        payload = {
+            **_shelter_payload(),
+            "organization_id": str(uuid.uuid4()),
+        }
+        app.dependency_overrides[get_session] = _session_for_create()
+        response = TestClient(app).post(
+            "/shelters", json=payload, headers=auth_headers("dev")
+        )
+
+        assert response.status_code == 422
 
     def test_create_rejects_administrative_fields(self):
         payload = {

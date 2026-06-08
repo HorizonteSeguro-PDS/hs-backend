@@ -91,15 +91,20 @@ def test_create_shelter_fills_created_by_from_authenticated_user():
     repository = MagicMock()
     service = ShelterService(repository)
     user_id = uuid.uuid4()
+    organization_id = uuid.uuid4()
 
-    created = service.create_shelter(_create_payload(), created_by=user_id)
+    created = service.create_shelter(
+        _create_payload(),
+        created_by=user_id,
+        organization_id=organization_id,
+    )
 
     repository.add.assert_called_once()
     repository.flush.assert_called_once_with()
     repository.refresh.assert_called_once_with(created)
     assert created.created_by == user_id
     assert created.responsible_user_id == user_id
-    assert created.organization_id is None
+    assert created.organization_id == organization_id
     assert created.verified is False
     assert created.verified_by is None
     assert created.status == ShelterStatus.PREPARING

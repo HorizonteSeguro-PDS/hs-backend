@@ -2,6 +2,9 @@ import uuid
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+from pydantic import ValidationError
+
 from domain.crisis.enums import CrisisStatus, CrisisType
 from domain.crisis.schemas import (
     CrisisCreate,
@@ -60,8 +63,6 @@ def test_crisis_list_item_response_is_limited_to_listing_fields():
 
 
 def test_crisis_create_accepts_modal_payload_aliases():
-    organization_id = uuid.uuid4()
-
     crisis = CrisisCreate(
         name="Sao Paulo Crisis",
         severity="ALTA",
@@ -70,15 +71,24 @@ def test_crisis_create_accepts_modal_payload_aliases():
         start_date="2024-01-01",
         status="ATIVA",
         type="FLOOD",
-        organization_id=organization_id,
     )
 
-    assert crisis.organization_id == organization_id
     assert crisis.severity_initial == 4
     assert crisis.state == "SP"
     assert crisis.start_date == date(2024, 1, 1)
     assert crisis.status == CrisisStatus.ACTIVE
     assert crisis.type == CrisisType.FLOOD
+
+
+def test_crisis_create_rejects_organization_id_in_request_body():
+    with pytest.raises(ValidationError):
+        CrisisCreate(
+            name="Sao Paulo Crisis",
+            type="flood",
+            state="SP",
+            city="Sao Paulo",
+            organization_id=uuid.uuid4(),
+        )
 
 
 def test_crisis_create_strips_type_and_uppercases_uf():

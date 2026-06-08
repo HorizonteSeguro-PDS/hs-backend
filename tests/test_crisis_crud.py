@@ -122,9 +122,8 @@ class TestCreateCrisis:
                 "start_date": "2024-01-01",
                 "status": "ATIVA",
                 "type": "FLOOD",
-                "organization_id": str(organization_id),
             },
-            headers=auth_headers("dev"),
+            headers=auth_headers("dev", organization_id=organization_id),
         )
 
         assert response.status_code == 201
@@ -135,6 +134,16 @@ class TestCreateCrisis:
         assert body["start_date"] == "2024-01-01"
         assert body["status"] == "active"
         assert body["type"] == "flood"
+
+    def test_create_rejects_organization_id_in_body(self):
+        app.dependency_overrides[get_session] = _session_for_create()
+        response = TestClient(app).post(
+            "/crises",
+            json={**_FLOOD_PAYLOAD, "organization_id": str(uuid.uuid4())},
+            headers=auth_headers("dev"),
+        )
+
+        assert response.status_code == 422
 
     def test_create_as_shelter_manager_returns_403(self):
         app.dependency_overrides[get_session] = _session_for_create()

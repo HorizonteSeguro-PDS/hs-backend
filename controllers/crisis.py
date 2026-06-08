@@ -40,7 +40,7 @@ def create_crisis(
     user: _WriteDep,
 ) -> Crisis:
     data = payload.model_dump(exclude={"severity"})
-    crisis = Crisis(**data, created_by=user.id)
+    crisis = Crisis(**data, organization_id=user.organization_id, created_by=user.id)
     session.add(crisis)
     session.flush()
 
