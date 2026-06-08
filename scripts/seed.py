@@ -34,11 +34,16 @@ from domain.crisis.enums import CrisisStatus, CrisisType  # noqa: E402
 from domain.models.audit_log import AuditLog  # noqa: E402, F401 — registers metadata
 from domain.models.crises_shelters import CrisesShelters  # noqa: E402
 from domain.models.crisis import Crisis  # noqa: E402
+from domain.models.resource_category import ResourceCategory  # noqa: E402
 from domain.models.shelter import Shelter  # noqa: E402
 from domain.models.user import User  # noqa: E402
 from domain.models.user_role import UserRole  # noqa: E402
 from domain.models.users_crises import UsersCrises  # noqa: E402
-from domain.schemas.enums import ShelterStatus, ShelterType  # noqa: E402
+from domain.schemas.enums import (  # noqa: E402
+    ResourceUnit,
+    ShelterStatus,
+    ShelterType,
+)
 from services.auth_service import (  # noqa: E402
     create_access_token,
     grant_role,
@@ -239,9 +244,36 @@ CRISIS_SHELTER_LINKS = {
     ],
 }
 
+CATEGORIES_SPEC: list[tuple[str, ResourceUnit, str]] = [
+    ("agua_potavel", ResourceUnit.L, "Água potável engarrafada"),
+    ("cobertor", ResourceUnit.UNIDADE, "Cobertor adulto"),
+    ("colchao", ResourceUnit.UNIDADE, "Colchão de campanha"),
+    (
+        "kit_medico_basico",
+        ResourceUnit.UNIDADE,
+        "Curativo, antitérmico, soro fisiológico",
+    ),
+    (
+        "kit_higiene_pessoal",
+        ResourceUnit.UNIDADE,
+        "Escova, pasta, sabonete, toalha",
+    ),
+    ("fralda_descartavel", ResourceUnit.UNIDADE, "Bebê — pacote"),
+    ("fralda_geriatrica", ResourceUnit.UNIDADE, "Adulto — pacote"),
+    ("absorvente", ResourceUnit.UNIDADE, "Pacote padrão"),
+    (
+        "alimento_nao_perecivel",
+        ResourceUnit.KG,
+        "Arroz, feijão, açúcar, óleo, etc.",
+    ),
+    ("racao_animal", ResourceUnit.KG, "Ração para cães e gatos"),
+    ("doacao_dinheiro", ResourceUnit.REAL, "Doação em dinheiro pra logística"),
+]
+
 SEEDED_USER_EMAILS = [u["email"] for u in USERS_SPEC]
 SEEDED_CRISIS_NAMES = [c["name"] for c in CRISES_SPEC]
 SEEDED_SHELTER_NAMES = [s["name"] for s in SHELTERS_SPEC]
+SEEDED_CATEGORY_NAMES = [name for name, _, _ in CATEGORIES_SPEC]
 
 
 def reset(session) -> None:
@@ -283,8 +315,13 @@ def reset(session) -> None:
         )
         session.execute(delete(UserRole).where(UserRole.user_id.in_(seeded_user_ids)))
         session.execute(delete(User).where(User.id.in_(seeded_user_ids)))
+    # Resource categories are shared / referenced by inventory_items and
+    # inventory_movements. Reset only the ones we seeded by name.
+    session.execute(
+        delete(ResourceCategory).where(ResourceCategory.name.in_(SEEDED_CATEGORY_NAMES))
+    )
     session.commit()
-    print("[seed] reset: deleted seeded users, crises, shelters and grants.")
+    print("[seed] reset: deleted seeded users, crises, shelters, grants, categories.")
 
 
 def seed_users(session) -> dict[str, tuple[User, list[Role]]]:
@@ -371,6 +408,32 @@ def seed_shelters(
         print(f"[seed] {inserted} new shelters created.")
     else:
         print("[seed] all sample shelters already exist.")
+    return rows
+
+
+def seed_categories(session) -> list[ResourceCategory]:
+    """Get-or-create the curated taxonomy of resource categories.
+
+    Idempotent: skip rows whose `name` already exists in the table.
+    """
+    inserted = 0
+    rows: list[ResourceCategory] = []
+    for name, unit, description in CATEGORIES_SPEC:
+        existing = session.scalar(
+            select(ResourceCategory).where(ResourceCategory.name == name)
+        )
+        if existing is not None:
+            rows.append(existing)
+            continue
+        category = ResourceCategory(name=name, unit=unit, description=description)
+        session.add(category)
+        session.flush()
+        rows.append(category)
+        inserted += 1
+    if inserted:
+        print(f"[seed] {inserted} new resource categories created.")
+    else:
+        print("[seed] all sample resource categories already exist.")
     return rows
 
 
@@ -492,6 +555,9 @@ def run(reset_first: bool) -> int:
                 crises=crises,
             )
             link_crises_shelters(session, crises=crises, shelters=shelters)
+            session.commit()
+
+            seed_categories(session)
             session.commit()
 
             print_credentials(users)
