@@ -6,7 +6,7 @@ import pytest
 
 from domain.errors.http import ResourceNotFoundError
 from domain.models.shelter import Shelter
-from domain.schemas.enums import ShelterStatus, ShelterType
+from domain.schemas.enums import BrazilianState, ShelterStatus, ShelterType
 from domain.shelter.schemas import (
     ShelterCreateRequest,
     ShelterRead,
@@ -27,6 +27,10 @@ def _make_shelter(**kwargs) -> Shelter:
         verified_by=kwargs.get("verified_by"),
         name=kwargs.get("name", "Abrigo Central"),
         address=kwargs.get("address", "Rua Principal, 100"),
+        neighborhood=kwargs.get("neighborhood", "Centro"),
+        city=kwargs.get("city", "Sao Paulo"),
+        state=kwargs.get("state", BrazilianState.SP),
+        cep=kwargs.get("cep", "01001-000"),
         latitude=kwargs.get("latitude", -23.55),
         longitude=kwargs.get("longitude", -46.63),
         capacity=kwargs.get("capacity", 100),
@@ -44,6 +48,8 @@ def _create_payload() -> ShelterCreateRequest:
     return ShelterCreateRequest(
         name="Abrigo Central",
         address="Rua Principal, 100",
+        city="Sao Paulo",
+        state=BrazilianState.SP,
         capacity=100,
         occupation=25,
         shelter_type=ShelterType.INSTITUTIONAL,

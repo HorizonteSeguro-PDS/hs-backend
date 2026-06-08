@@ -19,11 +19,12 @@ from services.shelter import ShelterService
 
 router = APIRouter(prefix="/shelters", tags=["shelters"])
 
-_ReadDep = Annotated[
+# Reads are PUBLIC. Writes: dev (everywhere), crisis_manager (acessa tudo)
+# and shelter_manager (operações do abrigo).
+_WriteDep = Annotated[
     CurrentUser,
-    Depends(require_role("dev", "crisis_manager", "shelter_manager", "sheltered")),
+    Depends(require_role("dev", "crisis_manager", "shelter_manager")),
 ]
-_WriteDep = Annotated[CurrentUser, Depends(require_role("dev", "shelter_manager"))]
 _SessionDep = Annotated[Session, Depends(get_session)]
 _PaginationDep = Annotated[PaginationParams, Depends(pagination_params)]
 
@@ -31,7 +32,6 @@ _PaginationDep = Annotated[PaginationParams, Depends(pagination_params)]
 @router.get("", response_model=Page[ShelterListItemResponse])
 def list_shelters(
     session: _SessionDep,
-    _user: _ReadDep,
     pagination: _PaginationDep,
 ) -> Page[ShelterListItemResponse]:
     service = ShelterService(ShelterRepository(session))
@@ -46,7 +46,6 @@ def list_shelters(
 def get_shelter(
     shelter_id: UUID,
     session: _SessionDep,
-    _user: _ReadDep,
 ) -> ShelterRead:
     service = ShelterService(ShelterRepository(session))
     return service.get_shelter(shelter_id)

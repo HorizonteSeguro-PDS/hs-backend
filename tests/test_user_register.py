@@ -63,14 +63,8 @@ class TestRegisterUser:
         response = TestClient(app).post("/users", json=_VALID_PAYLOAD)
         assert response.status_code == 401
 
-    def test_sheltered_cannot_create_anyone(self):
-        app.dependency_overrides[get_session] = _session_factory()
-        response = TestClient(app).post(
-            "/users", json=_VALID_PAYLOAD, headers=auth_headers("sheltered")
-        )
-        assert response.status_code == 403
-
-    def test_shelter_manager_cannot_create_another_shelter_manager(self):
+    def test_shelter_manager_cannot_create_anyone(self):
+        """shelter_manager is now the bottom of the matrix — creates nothing."""
         app.dependency_overrides[get_session] = _session_factory()
         response = TestClient(app).post(
             "/users",
@@ -78,15 +72,6 @@ class TestRegisterUser:
             headers=auth_headers("shelter_manager"),
         )
         assert response.status_code == 403
-
-    def test_shelter_manager_can_create_sheltered(self):
-        app.dependency_overrides[get_session] = _session_factory()
-        payload = dict(_VALID_PAYLOAD, roles=["sheltered"])
-        with patch("controllers.user.hash_password", return_value="$bcrypt$fake"):
-            response = TestClient(app).post(
-                "/users", json=payload, headers=auth_headers("shelter_manager")
-            )
-        assert response.status_code == 201
 
     def test_crisis_manager_can_create_shelter_manager(self):
         app.dependency_overrides[get_session] = _session_factory()
@@ -104,10 +89,19 @@ class TestRegisterUser:
         )
         assert response.status_code == 403
 
+    def test_crisis_manager_cannot_create_another_crisis_manager(self):
+        """crisis_manager can ONLY create shelter_manager — not another peer."""
+        app.dependency_overrides[get_session] = _session_factory()
+        payload = dict(_VALID_PAYLOAD, roles=["crisis_manager"])
+        response = TestClient(app).post(
+            "/users", json=payload, headers=auth_headers("crisis_manager")
+        )
+        assert response.status_code == 403
+
     def test_dev_can_create_any_role(self):
         app.dependency_overrides[get_session] = _session_factory()
         with patch("controllers.user.hash_password", return_value="$bcrypt$fake"):
-            for role in ("dev", "crisis_manager", "shelter_manager", "sheltered"):
+            for role in ("dev", "crisis_manager", "shelter_manager"):
                 response = TestClient(app).post(
                     "/users",
                     json=dict(
@@ -137,7 +131,7 @@ class TestRegisterUser:
         """If the target role list contains ANY role the actor can't create,
         the whole request fails (no partial creation)."""
         app.dependency_overrides[get_session] = _session_factory()
-        payload = dict(_VALID_PAYLOAD, roles=["sheltered", "dev"])
+        payload = dict(_VALID_PAYLOAD, roles=["shelter_manager", "dev"])
         response = TestClient(app).post(
             "/users", json=payload, headers=auth_headers("crisis_manager")
         )
@@ -175,6 +169,13 @@ class TestRegisterUser:
         assert response.status_code == 422
 
     def test_invalid_role_returns_422(self):
+        """sheltered no longer exists — must be rejected at the Pydantic layer."""
+        app.dependency_overrides[get_session] = _session_factory()
+        bad = dict(_VALID_PAYLOAD, roles=["sheltered"])
+        response = TestClient(app).post("/users", json=bad, headers=auth_headers("dev"))
+        assert response.status_code == 422
+
+    def test_unknown_role_returns_422(self):
         app.dependency_overrides[get_session] = _session_factory()
         bad = dict(_VALID_PAYLOAD, roles=["superuser"])
         response = TestClient(app).post("/users", json=bad, headers=auth_headers("dev"))
