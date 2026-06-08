@@ -55,7 +55,7 @@ class CrisisBase(BaseModel):
     @classmethod
     def _normalize_type(cls, value: object) -> object:
         if isinstance(value, str):
-            return value.lower()
+            return value.strip().lower()
         return value
 
     @field_validator("status", mode="before")
@@ -92,6 +92,8 @@ class CrisisBase(BaseModel):
             .replace("ú", "u")
             .replace("ç", "c")
         )
+        if len(normalized) == 2 and normalized.isalpha():
+            return normalized.upper()
         return _STATE_NAMES.get(normalized, value)
 
 
