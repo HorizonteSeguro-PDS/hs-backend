@@ -129,7 +129,8 @@ class TestCreateCrisis:
         assert response.status_code == 201
         body = response.json()
         assert body["organization_id"] == str(organization_id)
-        assert body["severity_initial"] == 4
+        # Nova escala 0-3: ALTA -> 3
+        assert body["severity_initial"] == 3
         assert body["state"] == "SP"
         assert body["start_date"] == "2024-01-01"
         assert body["status"] == "active"
@@ -178,13 +179,8 @@ class TestListCrises:
             "/crises", headers=auth_headers("shelter_manager")
         )
         assert response.status_code == 200
-        assert response.json() == {
-            "items": [],
-            "total": 0,
-            "page": 1,
-            "size": 10,
-            "pages": 0,
-        }
+        # Resposta agora é array plano (sem envelope de paginacao)
+        assert response.json() == []
 
     def test_returns_crises(self):
         crises = [
@@ -195,14 +191,26 @@ class TestListCrises:
         response = TestClient(app).get("/crises", headers=auth_headers("dev"))
         assert response.status_code == 200
         body = response.json()
-        assert len(body["items"]) == 2
-        assert body["total"] == 2
-        assert body["page"] == 1
-        assert body["size"] == 10
-        assert body["pages"] == 1
-        assert body["items"][0]["shelters_count"] == 0
-        assert "created_by" not in body["items"][0]
-        assert "close_reason" not in body["items"][0]
+        # array plano, sem envelope
+        assert isinstance(body, list)
+        assert len(body) == 2
+
+        first = body[0]
+        # shape exato pedido pelo front
+        assert set(first) == {
+            "id",
+            "name",
+            "severity",
+            "state",
+            "city",
+            "start_date",
+            "shelters_count",
+            "active",
+        }
+        assert first["shelters_count"] == 0
+        # severity_initial = 3 (ALTA) -> label "ALTA"
+        assert first["severity"] == "ALTA"
+        assert first["active"] is True
 
     def test_uses_requested_page_and_size(self):
         crises = [_make_crisis(name="Incêndio BA", type=CrisisType.FIRE)]
@@ -212,11 +220,10 @@ class TestListCrises:
         )
         assert response.status_code == 200
         body = response.json()
-        assert len(body["items"]) == 1
-        assert body["total"] == 2
-        assert body["page"] == 2
-        assert body["size"] == 1
-        assert body["pages"] == 2
+        # Sem envelope: pagination ainda atua no offset/limit, mas o cliente
+        # so ve o array.
+        assert isinstance(body, list)
+        assert len(body) == 1
 
     def test_filter_by_status_param_accepted(self):
         app.dependency_overrides[get_session] = _session_returning([])
@@ -248,13 +255,8 @@ class TestListCrises:
                 type_=None,
             ):
                 captured["type_"] = type_
-                return {
-                    "items": [],
-                    "total": 0,
-                    "page": params.page,
-                    "size": params.size,
-                    "pages": 0,
-                }
+                # Resposta agora é array plano
+                return []
 
         monkeypatch.setattr(crisis_controller, "CrisisService", FakeCrisisService)
         app.dependency_overrides[get_session] = _session_returning([])

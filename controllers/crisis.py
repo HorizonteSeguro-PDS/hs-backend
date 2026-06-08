@@ -19,7 +19,7 @@ from domain.crisis.schemas import (
 )
 from domain.models.crisis import Crisis
 from repositories import CrisisRepository
-from schemas.pagination import Page, PaginationParams, pagination_params
+from schemas.pagination import PaginationParams, pagination_params
 from services.audit_service import audit_event
 from services.crisis import CrisisService
 
@@ -58,14 +58,19 @@ def create_crisis(
     return crisis
 
 
-@router.get("", response_model=Page[CrisisListItemResponse])
+@router.get("", response_model=list[CrisisListItemResponse])
 def list_crises(
     session: _SessionDep,
     pagination: _PaginationDep,
     status: Annotated[CrisisStatus | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
     type_: Annotated[CrisisType | None, Query(alias="type")] = None,
-) -> Page[CrisisListItemResponse]:
+) -> list[CrisisListItemResponse]:
+    """Flat array shaped pro front (sem envelope de paginação).
+
+    `page`/`size` ainda funcionam como query params (offset/limit no banco),
+    mas só o array entra na resposta.
+    """
     service = CrisisService(CrisisRepository(session))
     return service.list_crises(
         pagination,

@@ -72,6 +72,25 @@ class CrisisStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class SeverityLabel(str, Enum):
+    """Severity label shipped to the frontend.
+
+    Backend stores severity as a small int (0-3); on response we map it to one
+    of these labels (regra de negocio no back, conforme combinado com o front).
+
+    Mapping:
+        0 -> INATIVO   (sem ocupacao / crise inativa)
+        1 -> BAIXA
+        2 -> MEDIA
+        3 -> ALTA
+    """
+
+    INATIVO = "INATIVO"
+    BAIXA = "BAIXA"
+    MEDIA = "MÉDIA"
+    ALTA = "ALTA"
+
+
 class BrazilianState(str, Enum):
     AC = "AC"
     AL = "AL"

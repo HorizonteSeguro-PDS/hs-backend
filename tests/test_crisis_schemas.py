@@ -1,6 +1,5 @@
 import uuid
-from datetime import date, datetime, timezone
-from types import SimpleNamespace
+from datetime import date
 
 import pytest
 from pydantic import ValidationError
@@ -10,56 +9,14 @@ from domain.crisis.schemas import (
     CrisisCreate,
     CrisisDetailResponse,
     CrisisListItemResponse,
+    ShelterInCrisisResponse,
 )
-from domain.schemas.enums import BrazilianState, ShelterStatus
-
-_NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+from domain.schemas.enums import BrazilianState, SeverityLabel
 
 
-def test_crisis_list_item_response_is_limited_to_listing_fields():
-    organization_id = uuid.uuid4()
-    crisis = SimpleNamespace(
-        id=uuid.uuid4(),
-        organization_id=organization_id,
-        name="Enchente Teste",
-        type=CrisisType.FLOOD,
-        description="Detalhe interno",
-        status=CrisisStatus.ACTIVE,
-        state="SP",
-        city="Sao Paulo",
-        start_date=date(2024, 1, 1),
-        severity_initial=3,
-        severity_calculated=None,
-        severity_calculated_at=None,
-        created_by=uuid.uuid4(),
-        created_at=_NOW,
-        updated_at=_NOW,
-        close_reason="Nao deve aparecer",
-        shelters_count=2,
-    )
-
-    response = CrisisListItemResponse.model_validate(crisis)
-    payload = response.model_dump()
-
-    assert set(payload) == {
-        "id",
-        "organization_id",
-        "name",
-        "type",
-        "status",
-        "state",
-        "city",
-        "start_date",
-        "severity_initial",
-        "severity_calculated",
-        "created_at",
-        "shelters_count",
-    }
-    assert "created_by" not in payload
-    assert "close_reason" not in payload
-    assert payload["organization_id"] == organization_id
-    assert payload["start_date"] == date(2024, 1, 1)
-    assert payload["shelters_count"] == 2
+# --------------------------------------------------------------------------- #
+# CrisisCreate — escala 0-3 (INATIVO/BAIXA/MÉDIA/ALTA)                         #
+# --------------------------------------------------------------------------- #
 
 
 def test_crisis_create_accepts_modal_payload_aliases():
@@ -73,11 +30,85 @@ def test_crisis_create_accepts_modal_payload_aliases():
         type="FLOOD",
     )
 
-    assert crisis.severity_initial == 4
+    assert crisis.severity_initial == 3  # ALTA = 3 na escala nova
     assert crisis.state == "SP"
     assert crisis.start_date == date(2024, 1, 1)
     assert crisis.status == CrisisStatus.ACTIVE
     assert crisis.type == CrisisType.FLOOD
+
+
+def test_crisis_create_maps_baixa_to_1():
+    crisis = CrisisCreate(
+        name="Estiagem",
+        severity="baixa",
+        state="CE",
+        city="Fortaleza",
+        type=CrisisType.OTHER,
+    )
+    assert crisis.severity_initial == 1
+
+
+def test_crisis_create_maps_media_to_2_with_or_without_accent():
+    no_accent = CrisisCreate(
+        name="Crise A",
+        severity="media",
+        state="SP",
+        city="Sao Paulo",
+        type=CrisisType.FLOOD,
+    )
+    with_accent = CrisisCreate(
+        name="Crise B",
+        severity="média",
+        state="SP",
+        city="Sao Paulo",
+        type=CrisisType.FLOOD,
+    )
+    assert no_accent.severity_initial == 2
+    assert with_accent.severity_initial == 2
+
+
+def test_crisis_create_maps_inativo_to_zero():
+    crisis = CrisisCreate(
+        name="Crise hibernando",
+        severity="inativo",
+        state="SP",
+        city="Sao Paulo",
+        type=CrisisType.OTHER,
+    )
+    assert crisis.severity_initial == 0
+
+
+def test_crisis_create_accepts_int_severity_in_range():
+    crisis = CrisisCreate(
+        name="Crise",
+        severity=2,
+        state="SP",
+        city="Sao Paulo",
+        type=CrisisType.FLOOD,
+    )
+    assert crisis.severity_initial == 2
+
+
+def test_crisis_create_rejects_int_severity_out_of_range():
+    with pytest.raises(ValidationError):
+        CrisisCreate(
+            name="Crise",
+            severity=5,  # antiga "critica" — nao existe mais
+            state="SP",
+            city="Sao Paulo",
+            type=CrisisType.FLOOD,
+        )
+
+
+def test_crisis_create_rejects_unknown_severity_alias():
+    with pytest.raises(ValidationError):
+        CrisisCreate(
+            name="Crise",
+            severity="extrema",  # nao mapeia
+            state="SP",
+            city="Sao Paulo",
+            type=CrisisType.FLOOD,
+        )
 
 
 def test_crisis_create_rejects_organization_id_in_request_body():
@@ -103,51 +134,136 @@ def test_crisis_create_strips_type_and_uppercases_uf():
     assert crisis.state == "SP"
 
 
-def test_crisis_detail_response_uses_shelter_summary_without_recursion():
-    shelter = SimpleNamespace(
-        id=uuid.uuid4(),
-        name="Abrigo Central",
-        address="Rua Principal, 100",
-        city="Sao Paulo",
-        state=BrazilianState.SP,
-        capacity=100,
-        occupation=25,
-        status=ShelterStatus.ACTIVE,
-        crises=[],
-    )
-    crisis = SimpleNamespace(
-        id=uuid.uuid4(),
-        organization_id=None,
-        name="Enchente Teste",
-        type=CrisisType.FLOOD,
-        description=None,
-        status=CrisisStatus.ACTIVE,
-        state="SP",
-        city="Sao Paulo",
-        start_date=None,
-        severity_initial=3,
-        severity_calculated=None,
-        severity_calculated_at=None,
-        created_by=uuid.uuid4(),
-        created_at=_NOW,
-        updated_at=_NOW,
-        closed_at=None,
-        closed_by=None,
-        close_reason=None,
-        shelters=[shelter],
-    )
+def test_crisis_create_severity_initial_field_caps_at_3():
+    with pytest.raises(ValidationError):
+        CrisisCreate(
+            name="Crise",
+            type=CrisisType.FLOOD,
+            state="SP",
+            city="Sao Paulo",
+            severity_initial=4,  # ge=0, le=3 agora
+        )
 
-    response = CrisisDetailResponse.model_validate(crisis)
+
+# --------------------------------------------------------------------------- #
+# CrisisListItemResponse — shape exato que o front pediu                      #
+# --------------------------------------------------------------------------- #
+
+
+def test_crisis_list_item_response_has_only_the_fields_the_front_wants():
+    response = CrisisListItemResponse.model_validate(
+        {
+            "id": uuid.uuid4(),
+            "name": "Enchente Teste",
+            "severity": SeverityLabel.ALTA,
+            "state": "SP",
+            "city": "Sao Paulo",
+            "start_date": date(2024, 1, 1),
+            "shelters_count": 2,
+            "active": True,
+        }
+    )
     payload = response.model_dump()
 
-    assert len(payload["shelters"]) == 1
-    assert set(payload["shelters"][0]) == {
+    assert set(payload) == {
         "id",
         "name",
-        "address",
+        "severity",
+        "state",
+        "city",
+        "start_date",
+        "shelters_count",
+        "active",
+    }
+    assert payload["severity"] == SeverityLabel.ALTA
+    assert payload["active"] is True
+    assert payload["shelters_count"] == 2
+
+
+def test_crisis_list_item_response_serializes_severity_as_string():
+    response = CrisisListItemResponse.model_validate(
+        {
+            "id": uuid.uuid4(),
+            "name": "Crise Média",
+            "severity": SeverityLabel.MEDIA,
+            "state": "SP",
+            "city": "Sao Paulo",
+            "start_date": None,
+            "shelters_count": 0,
+            "active": False,
+        }
+    )
+    dumped = response.model_dump(mode="json")
+    assert dumped["severity"] == "MÉDIA"
+
+
+# --------------------------------------------------------------------------- #
+# ShelterInCrisisResponse — shelter aninhado em GET /crises/{id}              #
+# --------------------------------------------------------------------------- #
+
+
+def test_shelter_in_crisis_response_uses_current_occupancy_and_urgent_needs():
+    response = ShelterInCrisisResponse.model_validate(
+        {
+            "id": uuid.uuid4(),
+            "name": "Abrigo Central",
+            "city": "Sao Paulo",
+            "state": BrazilianState.SP,
+            "urgent_needs": [],
+            "capacity": 100,
+            "current_occupancy": 25,
+            "severity": SeverityLabel.BAIXA,
+        }
+    )
+    payload = response.model_dump()
+
+    assert set(payload) == {
+        "id",
+        "name",
         "city",
         "state",
+        "urgent_needs",
         "capacity",
-        "occupation",
-        "status",
+        "current_occupancy",
+        "severity",
     }
+    assert payload["urgent_needs"] == []
+    assert payload["current_occupancy"] == 25
+    assert payload["severity"] == SeverityLabel.BAIXA
+
+
+# --------------------------------------------------------------------------- #
+# CrisisDetailResponse — listagem + shelters                                  #
+# --------------------------------------------------------------------------- #
+
+
+def test_crisis_detail_response_includes_shelters_field():
+    detail = CrisisDetailResponse.model_validate(
+        {
+            "id": uuid.uuid4(),
+            "name": "Enchente Teste",
+            "severity": SeverityLabel.ALTA,
+            "state": "SP",
+            "city": "Sao Paulo",
+            "start_date": None,
+            "shelters_count": 1,
+            "active": True,
+            "shelters": [
+                {
+                    "id": uuid.uuid4(),
+                    "name": "Abrigo Central",
+                    "city": "Sao Paulo",
+                    "state": BrazilianState.SP,
+                    "urgent_needs": [],
+                    "capacity": 100,
+                    "current_occupancy": 90,
+                    "severity": SeverityLabel.ALTA,
+                }
+            ],
+        }
+    )
+
+    assert len(detail.shelters) == 1
+    assert detail.shelters[0].name == "Abrigo Central"
+    assert detail.shelters[0].severity == SeverityLabel.ALTA
+    assert detail.active is True

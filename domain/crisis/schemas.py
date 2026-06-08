@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from domain.crisis.enums import CrisisStatus, CrisisType
-from domain.shelter.schemas import ShelterSummaryResponse
+from domain.schemas.enums import BrazilianState, SeverityLabel
 
 
 _STATE_NAMES = {
@@ -38,6 +38,21 @@ _STATE_NAMES = {
 }
 
 
+# Aliases aceitos no POST /crises (em PT/EN, com ou sem acento). Mapeia pro
+# inteiro 0-3 que persiste no banco.
+_SEVERITY_ALIASES: dict[str, int] = {
+    "inativo": 0,
+    "inativa": 0,
+    "baixa": 1,
+    "low": 1,
+    "media": 2,
+    "média": 2,
+    "medium": 2,
+    "alta": 3,
+    "high": 3,
+}
+
+
 class CrisisBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -50,7 +65,7 @@ class CrisisBase(BaseModel):
     city: str = Field(min_length=1, max_length=120)
     start_date: date | None = None
     status: CrisisStatus = CrisisStatus.ACTIVE
-    severity_initial: int | None = Field(default=None, ge=1, le=5)
+    severity_initial: int | None = Field(default=None, ge=0, le=3)
 
     @field_validator("type", mode="before")
     @classmethod
@@ -103,22 +118,15 @@ class CrisisCreate(CrisisBase):
 
     @model_validator(mode="after")
     def _map_modal_severity(self) -> "CrisisCreate":
+        # Se o front mandou severity_initial direto, respeita.
         if self.severity_initial is not None or self.severity is None:
             return self
         if isinstance(self.severity, int):
-            if not 1 <= self.severity <= 5:
-                raise ValueError("severity must be between 1 and 5")
+            if not 0 <= self.severity <= 3:
+                raise ValueError("severity must be between 0 and 3")
             self.severity_initial = self.severity
             return self
-        severity_aliases = {
-            "baixa": 2,
-            "media": 3,
-            "média": 3,
-            "alta": 4,
-            "critica": 5,
-            "crítica": 5,
-        }
-        value = severity_aliases.get(self.severity.strip().lower())
+        value = _SEVERITY_ALIASES.get(self.severity.strip().lower())
         if value is None:
             raise ValueError("invalid severity")
         self.severity_initial = value
@@ -131,8 +139,8 @@ class CrisisUpdate(BaseModel):
     description: str | None = None
     state: str | None = Field(default=None, min_length=2, max_length=2)
     city: str | None = Field(default=None, min_length=1, max_length=120)
-    severity_initial: int | None = Field(default=None, ge=1, le=5)
-    severity_calculated: int | None = Field(default=None, ge=1, le=5)
+    severity_initial: int | None = Field(default=None, ge=0, le=3)
+    severity_calculated: int | None = Field(default=None, ge=0, le=3)
 
 
 class CrisisClose(BaseModel):
@@ -140,6 +148,12 @@ class CrisisClose(BaseModel):
 
 
 class CrisisRead(BaseModel):
+    """Internal/admin shape — write endpoints (POST/PATCH/close/reopen) ainda
+    devolvem isso, pra preservar visibilidade dos campos brutos (severity_initial
+    em int, status enum completo, etc.). O front consumidor da listagem usa as
+    *Response classes abaixo.
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
@@ -163,21 +177,46 @@ class CrisisRead(BaseModel):
 
 
 class CrisisListItemResponse(BaseModel):
+    """Forma exata que o front espera em GET /crises (array plano).
+
+    Severity vai como string label (regra de negocio no back); status é
+    projetado em `active: bool` porque o front so distingue ativo/inativo.
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    organization_id: UUID | None = None
     name: str
-    type: CrisisType
-    status: CrisisStatus
+    severity: SeverityLabel
     state: str
     city: str
     start_date: date | None = None
-    severity_initial: int | None = None
-    severity_calculated: int | None = None
-    created_at: datetime
     shelters_count: int = Field(ge=0)
+    active: bool
 
 
-class CrisisDetailResponse(CrisisRead):
-    shelters: list[ShelterSummaryResponse] = Field(default_factory=list)
+class ShelterInCrisisResponse(BaseModel):
+    """Forma de cada shelter dentro de GET /crises/{id}.
+
+    `urgent_needs` vai vazio enquanto o modelo de shelter_needs nao existe —
+    é placeholder pro contrato do front nao quebrar.
+
+    `current_occupancy` é o `occupation` do model renomeado pro contrato do
+    front. `severity` é derivado de occupation/capacity (regra de negocio
+    no back).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    city: str
+    state: BrazilianState
+    urgent_needs: list[str] = Field(default_factory=list)
+    capacity: int
+    current_occupancy: int
+    severity: SeverityLabel
+
+
+class CrisisDetailResponse(CrisisListItemResponse):
+    shelters: list[ShelterInCrisisResponse] = Field(default_factory=list)
