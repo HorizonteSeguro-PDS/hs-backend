@@ -129,5 +129,12 @@ def test_list_paginated_orders_by_created_at_desc():
             PaginationParams(page=1, size=10), shelter_id=shelter
         )
         # Convert to naive datetime for comparison (since SQLite returns naive)
-        expected = [new.replace(tzinfo=None), middle.replace(tzinfo=None), old.replace(tzinfo=None)]
-        assert [r.created_at.replace(tzinfo=None) if r.created_at.tzinfo else r.created_at for r in rows] == expected
+        expected = [
+            new.replace(tzinfo=None),
+            middle.replace(tzinfo=None),
+            old.replace(tzinfo=None),
+        ]
+        assert [
+            r.created_at.replace(tzinfo=None) if r.created_at.tzinfo else r.created_at
+            for r in rows
+        ] == expected
