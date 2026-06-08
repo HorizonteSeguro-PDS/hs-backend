@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from domain.crisis.enums import CrisisStatus, CrisisType
 from domain.crisis.schemas import CrisisDetailResponse, CrisisListItemResponse
-from domain.schemas.enums import ShelterStatus
+from domain.schemas.enums import BrazilianState, ShelterStatus
 
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -53,6 +53,8 @@ def test_crisis_detail_response_uses_shelter_summary_without_recursion():
         id=uuid.uuid4(),
         name="Abrigo Central",
         address="Rua Principal, 100",
+        city="Sao Paulo",
+        state=BrazilianState.SP,
         capacity=100,
         occupation=25,
         status=ShelterStatus.ACTIVE,
@@ -86,6 +88,8 @@ def test_crisis_detail_response_uses_shelter_summary_without_recursion():
         "id",
         "name",
         "address",
+        "city",
+        "state",
         "capacity",
         "occupation",
         "status",

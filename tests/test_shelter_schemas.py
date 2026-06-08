@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import ValidationError
 
-from domain.schemas.enums import ShelterStatus, ShelterType
+from domain.schemas.enums import BrazilianState, ShelterStatus, ShelterType
 from domain.shelter.schemas import (
     ShelterCreate,
     ShelterCreateRequest,
@@ -26,6 +26,10 @@ def _valid_shelter_payload() -> dict:
         "verified_by": None,
         "name": "Abrigo Central",
         "address": "Rua Principal, 100",
+        "neighborhood": "Centro",
+        "city": "Sao Paulo",
+        "state": BrazilianState.SP,
+        "cep": "01001-000",
         "latitude": -23.55,
         "longitude": -46.63,
         "capacity": 100,
@@ -40,6 +44,10 @@ def _valid_create_request_payload() -> dict:
     return {
         "name": "Abrigo Central",
         "address": "Rua Principal, 100",
+        "neighborhood": "Centro",
+        "city": "Sao Paulo",
+        "state": BrazilianState.SP,
+        "cep": "01001-000",
         "latitude": -23.55,
         "longitude": -46.63,
         "capacity": 100,
@@ -122,18 +130,18 @@ def test_shelter_read_serializes_from_attributes_without_crisis_id():
         crisis_id=uuid.uuid4(),
         urgent_needs=["water"],
         severity="high",
-        city="Sao Paulo",
-        state="SP",
     )
 
     response = ShelterRead.model_validate(shelter)
     payload = response.model_dump()
 
+    # The new location fields ARE part of ShelterRead and should round-trip.
+    assert payload["city"] == "Sao Paulo"
+    assert payload["state"] == BrazilianState.SP
+    # crisis_id and ad-hoc attrs from the namespace are excluded from the schema.
     assert "crisis_id" not in payload
     assert "urgent_needs" not in payload
     assert "severity" not in payload
-    assert "city" not in payload
-    assert "state" not in payload
     assert payload["id"] == shelter.id
 
 
@@ -156,6 +164,10 @@ def test_shelter_list_and_summary_responses_are_limited():
         "id",
         "name",
         "address",
+        "neighborhood",
+        "city",
+        "state",
+        "cep",
         "capacity",
         "occupation",
         "shelter_type",
@@ -166,6 +178,8 @@ def test_shelter_list_and_summary_responses_are_limited():
         "id",
         "name",
         "address",
+        "city",
+        "state",
         "capacity",
         "occupation",
         "status",
