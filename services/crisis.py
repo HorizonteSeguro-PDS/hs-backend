@@ -137,7 +137,5 @@ class CrisisService(BaseService[Crisis]):
             "urgent_needs": [],
             "capacity": shelter.capacity,
             "current_occupancy": shelter.occupation,
-            "severity": derive_shelter_severity(
-                shelter.occupation, shelter.capacity
-            ),
+            "severity": derive_shelter_severity(shelter.occupation, shelter.capacity),
         }
