@@ -21,6 +21,7 @@ class InventoryItem(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
+        default=uuid.uuid4,
         server_default=func.gen_random_uuid(),
     )
     # FK constraints live in the migrations.
