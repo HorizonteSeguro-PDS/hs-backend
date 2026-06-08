@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from dependencies.session import get_session
 from domain.models.crises_shelters import CrisesShelters
+from domain.models.crisis import Crisis
 from domain.models.shelter import Shelter
 from domain.schemas.enums import ShelterStatus, ShelterType
 from main import app
@@ -231,6 +232,7 @@ class TestCreateShelter:
                     obj.updated_at = _NOW
 
             mock.add.side_effect = _add
+            mock.get.return_value = Crisis(id=crisis_id)
             yield mock
 
         payload = _shelter_payload()
@@ -252,6 +254,30 @@ class TestCreateShelter:
             isinstance(obj, CrisesShelters) and obj.crisis_id == crisis_id
             for obj in added
         )
+
+    def test_create_with_unknown_crisis_id_returns_404_without_adding_shelter(self):
+        crisis_id = uuid.uuid4()
+        added = []
+
+        def override():
+            mock = MagicMock()
+            mock.get.return_value = None
+            mock.add.side_effect = added.append
+            yield mock
+
+        payload = _shelter_payload()
+        payload["crisis_id"] = str(crisis_id)
+
+        app.dependency_overrides[get_session] = override
+        response = TestClient(app).post(
+            "/shelters",
+            json=payload,
+            headers=auth_headers("dev"),
+        )
+
+        assert response.status_code == 404
+        assert response.json()["detail"] == "crisis not found"
+        assert not any(isinstance(obj, Shelter) for obj in added)
 
     def test_create_rejects_organization_id_in_body(self):
         payload = {

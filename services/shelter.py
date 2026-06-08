@@ -1,7 +1,9 @@
 from uuid import UUID
 
 from domain.models.crises_shelters import CrisesShelters
+from domain.models.crisis import Crisis
 from domain.models.shelter import Shelter
+from domain.errors.http import ResourceNotFoundError
 from domain.shelter.schemas import (
     ShelterCreateRequest,
     ShelterListItemResponse,
@@ -41,6 +43,12 @@ class ShelterService(BaseService[Shelter]):
         created_by: UUID,
         organization_id: UUID | None,
     ) -> Shelter:
+        if (
+            payload.crisis_id is not None
+            and self.repository.session.get(Crisis, payload.crisis_id) is None
+        ):
+            raise ResourceNotFoundError("crisis not found")
+
         data = payload.model_dump(exclude={"crisis_id"})
         shelter = Shelter(
             **data,
