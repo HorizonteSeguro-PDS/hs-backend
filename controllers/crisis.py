@@ -26,13 +26,8 @@ from services.crisis import CrisisService
 
 router = APIRouter(prefix="/crises", tags=["crises"])
 
-# Reads are open to any authenticated role (scope filtering will come in a
-# follow-up story — see PHS-XX). Writes are gated to dev and crisis_manager;
-# shelter_manager / sheltered cannot create or mutate crises.
-_ReadDep = Annotated[
-    CurrentUser,
-    Depends(require_role("dev", "crisis_manager", "shelter_manager", "sheltered")),
-]
+# Reads are PUBLIC — visualizar a operação não exige token; isso facilita o
+# painel público de transparência. Writes ficam restritos a dev + crisis_manager.
 _WriteDep = Annotated[CurrentUser, Depends(require_role("dev", "crisis_manager"))]
 _SessionDep = Annotated[Session, Depends(get_session)]
 _PaginationDep = Annotated[PaginationParams, Depends(pagination_params)]
@@ -65,7 +60,6 @@ def create_crisis(
 @router.get("", response_model=Page[CrisisListItemResponse])
 def list_crises(
     session: _SessionDep,
-    _user: _ReadDep,
     pagination: _PaginationDep,
     status: Annotated[CrisisStatus | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
@@ -88,7 +82,6 @@ def list_crises(
 def get_crisis(
     crisis_id: UUID,
     session: _SessionDep,
-    _user: _ReadDep,
 ) -> CrisisDetailResponse:
     service = CrisisService(CrisisRepository(session))
     return service.get_crisis_detail(crisis_id)

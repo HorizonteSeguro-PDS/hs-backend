@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from domain.schemas.enums import ShelterStatus, ShelterType
+from domain.schemas.enums import BrazilianState, ShelterStatus, ShelterType
 
 
 class ShelterBase(BaseModel):
@@ -12,6 +12,10 @@ class ShelterBase(BaseModel):
     verified_by: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     address: str = Field(min_length=1, max_length=255)
+    neighborhood: str | None = Field(default=None, max_length=120)
+    city: str = Field(min_length=1, max_length=120)
+    state: BrazilianState
+    cep: str | None = Field(default=None, max_length=9)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     capacity: int = Field(ge=0)
@@ -34,6 +38,10 @@ class ShelterCreateRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=200)
     address: str = Field(min_length=1, max_length=255)
+    neighborhood: str | None = Field(default=None, max_length=120)
+    city: str = Field(min_length=1, max_length=120)
+    state: BrazilianState
+    cep: str | None = Field(default=None, max_length=9)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     capacity: int = Field(ge=0)
@@ -54,6 +62,10 @@ class ShelterUpdate(BaseModel):
     verified_by: UUID | None = None
     name: str | None = Field(default=None, min_length=1, max_length=200)
     address: str | None = Field(default=None, min_length=1, max_length=255)
+    neighborhood: str | None = Field(default=None, max_length=120)
+    city: str | None = Field(default=None, min_length=1, max_length=120)
+    state: BrazilianState | None = None
+    cep: str | None = Field(default=None, max_length=9)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     capacity: int | None = Field(default=None, ge=0)
@@ -68,6 +80,10 @@ class ShelterUpdateRequest(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=200)
     address: str | None = Field(default=None, min_length=1, max_length=255)
+    neighborhood: str | None = Field(default=None, max_length=120)
+    city: str | None = Field(default=None, min_length=1, max_length=120)
+    state: BrazilianState | None = None
+    cep: str | None = Field(default=None, max_length=9)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     capacity: int | None = Field(default=None, ge=0)
@@ -90,6 +106,10 @@ class ShelterListItemResponse(BaseModel):
     id: UUID
     name: str
     address: str
+    neighborhood: str | None = None
+    city: str
+    state: BrazilianState
+    cep: str | None = None
     capacity: int
     occupation: int
     shelter_type: ShelterType
@@ -103,6 +123,8 @@ class ShelterSummaryResponse(BaseModel):
     id: UUID
     name: str
     address: str
+    city: str
+    state: BrazilianState
     capacity: int
     occupation: int
     status: ShelterStatus

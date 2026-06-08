@@ -16,6 +16,7 @@ from domain.schemas.enums import (
     NotificationType,
     OrganizationType,
     PriorityLevel,
+    ResourceUnit,
     RoleScope,
     ShelterNeedStatus,
     ShelterStatus,
@@ -214,7 +215,7 @@ class BeneficiaryRead(BeneficiaryBase, BaseSchema):
 
 class ResourceCategoryBase(BaseModel):
     name: str
-    unit: str
+    unit: ResourceUnit
     description: str | None = None
 
 
@@ -224,7 +225,7 @@ class ResourceCategoryCreate(ResourceCategoryBase):
 
 class ResourceCategoryUpdate(BaseModel):
     name: str | None = None
-    unit: str | None = None
+    unit: ResourceUnit | None = None
     description: str | None = None
 
 
