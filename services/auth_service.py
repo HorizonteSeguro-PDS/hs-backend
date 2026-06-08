@@ -88,10 +88,9 @@ def grant_role(session: Session, *, user_id: UUID, role: Role) -> None:
 # --- permissions matrix --- #
 
 _CREATE_RULES: dict[Role, set[Role]] = {
-    Role.DEV: {Role.DEV, Role.CRISIS_MANAGER, Role.SHELTER_MANAGER, Role.SHELTERED},
-    Role.CRISIS_MANAGER: {Role.SHELTER_MANAGER, Role.SHELTERED},
-    Role.SHELTER_MANAGER: {Role.SHELTERED},
-    Role.SHELTERED: set(),
+    Role.DEV: {Role.DEV, Role.CRISIS_MANAGER, Role.SHELTER_MANAGER},
+    Role.CRISIS_MANAGER: {Role.SHELTER_MANAGER},
+    Role.SHELTER_MANAGER: set(),
 }
 
 

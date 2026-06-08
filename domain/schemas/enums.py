@@ -8,6 +8,20 @@ class RoleScope(str, Enum):
     SHELTER = "shelter"
 
 
+class ResourceUnit(str, Enum):
+    """Unit of measure for a ResourceCategory.
+
+    Mirrors the `resource_unit` Postgres enum defined in migration 0013.
+    """
+
+    KG = "kg"
+    G = "g"
+    L = "L"
+    ML = "mL"
+    UNIDADE = "unidade"
+    REAL = "real"
+
+
 class OrganizationType(str, Enum):
     CRISIS_MANAGER = "crisis_manager"
     SHELTER_OPERATOR = "shelter_operator"
