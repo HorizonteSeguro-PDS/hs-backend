@@ -311,14 +311,15 @@ class TestDeleteShelter:
         assert response.status_code == 204
         assert response.content == b""
 
-    def test_delete_as_crisis_manager_returns_403(self):
+    def test_delete_as_crisis_manager_is_allowed(self):
+        """crisis_manager 'acessa tudo' — including delete on shelters."""
         shelter = _make_shelter()
         app.dependency_overrides[get_session] = _session_get(shelter)
         response = TestClient(app).delete(
             f"/shelters/{shelter.id}", headers=auth_headers("crisis_manager")
         )
 
-        assert response.status_code == 403
+        assert response.status_code == 204
 
     def test_delete_nonexistent_returns_404(self):
         app.dependency_overrides[get_session] = _session_get(None)
