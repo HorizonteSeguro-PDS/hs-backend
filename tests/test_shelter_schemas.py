@@ -25,7 +25,7 @@ def _valid_shelter_payload() -> dict:
         "responsible_user_id": uuid.uuid4(),
         "verified_by": None,
         "name": "Abrigo Central",
-        "email": "contato@abrigo.test",
+        "email": "contato@abrigo.horizonteseguro.app",
         "phone": "+5511999990000",
         "address": "Rua Principal, 100",
         "neighborhood": "Centro",
@@ -48,7 +48,7 @@ def _valid_shelter_payload() -> dict:
 def _valid_create_request_payload() -> dict:
     return {
         "name": "Abrigo Central",
-        "email": "contato@abrigo.test",
+        "email": "contato@abrigo.horizonteseguro.app",
         "phone": "+5511999990000",
         "address": "Rua Principal, 100",
         "neighborhood": "Centro",
