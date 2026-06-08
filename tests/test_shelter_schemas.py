@@ -25,6 +25,8 @@ def _valid_shelter_payload() -> dict:
         "responsible_user_id": uuid.uuid4(),
         "verified_by": None,
         "name": "Abrigo Central",
+        "email": "contato@abrigo.horizonteseguro.app",
+        "phone": "+5511999990000",
         "address": "Rua Principal, 100",
         "neighborhood": "Centro",
         "city": "Sao Paulo",
@@ -33,9 +35,12 @@ def _valid_shelter_payload() -> dict:
         "latitude": -23.55,
         "longitude": -46.63,
         "capacity": 100,
+        "entry_requirements": "Documento com foto",
+        "attended_special_needs": "Idosos, criancas",
         "occupation": 25,
         "shelter_type": ShelterType.INSTITUTIONAL,
         "status": ShelterStatus.ACTIVE,
+        "bio": "Abrigo coordenado pela paroquia local",
         "verified": True,
     }
 
@@ -43,6 +48,8 @@ def _valid_shelter_payload() -> dict:
 def _valid_create_request_payload() -> dict:
     return {
         "name": "Abrigo Central",
+        "email": "contato@abrigo.horizonteseguro.app",
+        "phone": "+5511999990000",
         "address": "Rua Principal, 100",
         "neighborhood": "Centro",
         "city": "Sao Paulo",
@@ -51,8 +58,11 @@ def _valid_create_request_payload() -> dict:
         "latitude": -23.55,
         "longitude": -46.63,
         "capacity": 100,
+        "entry_requirements": "Documento com foto",
+        "attended_special_needs": "Idosos, criancas",
         "occupation": 25,
         "shelter_type": ShelterType.INSTITUTIONAL,
+        "bio": "Abrigo coordenado pela paroquia local",
     }
 
 
@@ -170,6 +180,8 @@ def test_shelter_list_and_summary_responses_are_limited():
         "cep",
         "capacity",
         "occupation",
+        "entry_requirements",
+        "attended_special_needs",
         "shelter_type",
         "status",
         "verified",
