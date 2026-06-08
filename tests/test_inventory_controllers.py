@@ -100,7 +100,7 @@ class TestInventoryController:
     def teardown_method(self):
         app.dependency_overrides = {}
 
-    def test_list_inventory_requires_auth(self, monkeypatch):
+    def test_list_inventory_returns_200_for_allowed_role(self, monkeypatch):
         shelter_id = uuid.uuid4()
         item_id = uuid.uuid4()
         category_id = uuid.uuid4()
