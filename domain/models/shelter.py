@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import VARCHAR, Boolean, Enum as PgEnum, Float, Index, Integer, func
+from sqlalchemy import (
+    VARCHAR,
+    Boolean,
+    Enum as PgEnum,
+    Float,
+    Index,
+    Integer,
+    func,
+    String,
+)
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -53,6 +62,8 @@ class Shelter(Base):
         UUID(as_uuid=True), nullable=True
     )
     name: Mapped[str] = mapped_column(VARCHAR, nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
     address: Mapped[str] = mapped_column(VARCHAR, nullable=False)
     neighborhood: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
     city: Mapped[str] = mapped_column(VARCHAR, nullable=False)
@@ -61,6 +72,8 @@ class Shelter(Base):
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_requirements: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
+    attended_special_needs: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
     occupation: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     shelter_type: Mapped[ShelterType] = mapped_column(shelter_type_pg, nullable=False)
     status: Mapped[ShelterStatus] = mapped_column(
@@ -68,6 +81,7 @@ class Shelter(Base):
         nullable=False,
         server_default="preparing",
     )
+    bio: Mapped[str | None] = mapped_column(VARCHAR, nullable=True)
     verified: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
