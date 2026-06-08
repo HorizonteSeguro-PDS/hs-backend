@@ -38,7 +38,11 @@ def login(payload: LoginRequest, session: _SessionDep) -> LoginResponse:
         )
     user, roles = result
 
-    token, expires_in = create_access_token(user_id=user.id, roles=roles)
+    token, expires_in = create_access_token(
+        user_id=user.id,
+        roles=roles,
+        organization_id=user.organization_id,
+    )
 
     user.last_login_at = datetime.now(timezone.utc)
 

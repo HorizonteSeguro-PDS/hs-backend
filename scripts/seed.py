@@ -513,7 +513,11 @@ def print_credentials(users: dict[str, tuple[User, list[Role]]]) -> None:
     print("=== JWTs (validos por 24h) ===")
     for spec in USERS_SPEC:
         user, roles = users[spec["email"]]
-        token, _ = create_access_token(user_id=user.id, roles=roles)
+        token, _ = create_access_token(
+            user_id=user.id,
+            roles=roles,
+            organization_id=user.organization_id,
+        )
         role_label = ",".join(r.value for r in roles)
         print(f"\n[{role_label}]")
         print(f"  email:   {user.email}")

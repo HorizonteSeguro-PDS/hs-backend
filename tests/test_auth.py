@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from jose import jwt
 
 from dependencies.auth import require_role
+from domain.auth.jwt import decode_jwt
 
 _app = FastAPI()
 
@@ -34,6 +35,22 @@ def _headers(*roles: str) -> dict:
 
 
 class TestJwtAuth:
+    def test_decode_jwt_reads_optional_organization_id(self):
+        organization_id = uuid4()
+        token = jwt.encode(
+            {
+                "sub": str(uuid4()),
+                "roles": ["crisis_manager"],
+                "organization_id": str(organization_id),
+            },
+            os.environ["JWT_SECRET"],
+            algorithm="HS256",
+        )
+
+        user = decode_jwt(token)
+
+        assert user.organization_id == organization_id
+
     def test_no_auth_header_returns_401(self):
         response = TestClient(_app).get("/dev-only")
         assert response.status_code == 401

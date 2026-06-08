@@ -39,7 +39,8 @@ def create_crisis(
     session: _SessionDep,
     user: _WriteDep,
 ) -> Crisis:
-    crisis = Crisis(**payload.model_dump(), created_by=user.id)
+    data = payload.model_dump(exclude={"severity"})
+    crisis = Crisis(**data, organization_id=user.organization_id, created_by=user.id)
     session.add(crisis)
     session.flush()
 
@@ -49,7 +50,7 @@ def create_crisis(
         entity_id=crisis.id,
         action=AuditAction.CREATE.value,
         author_id=user.id,
-        payload=payload.model_dump(mode="json"),
+        payload=payload.model_dump(mode="json", exclude={"severity"}),
     )
 
     session.commit()

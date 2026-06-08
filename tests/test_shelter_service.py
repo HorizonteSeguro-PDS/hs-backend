@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from domain.errors.http import ResourceNotFoundError
+from domain.models.crises_shelters import CrisesShelters
+from domain.models.crisis import Crisis
 from domain.models.shelter import Shelter
 from domain.schemas.enums import BrazilianState, ShelterStatus, ShelterType
 from domain.shelter.schemas import (
@@ -56,6 +58,12 @@ def _create_payload() -> ShelterCreateRequest:
     )
 
 
+def _create_payload_for_crisis(crisis_id: uuid.UUID) -> ShelterCreateRequest:
+    payload = _create_payload()
+    payload.crisis_id = crisis_id
+    return payload
+
+
 def test_list_shelters_returns_paginated_list_items():
     repository = MagicMock()
     repository.list.return_value = [_make_shelter()]
@@ -91,18 +99,61 @@ def test_create_shelter_fills_created_by_from_authenticated_user():
     repository = MagicMock()
     service = ShelterService(repository)
     user_id = uuid.uuid4()
+    organization_id = uuid.uuid4()
 
-    created = service.create_shelter(_create_payload(), created_by=user_id)
+    created = service.create_shelter(
+        _create_payload(),
+        created_by=user_id,
+        organization_id=organization_id,
+    )
 
     repository.add.assert_called_once()
     repository.flush.assert_called_once_with()
     repository.refresh.assert_called_once_with(created)
     assert created.created_by == user_id
     assert created.responsible_user_id == user_id
-    assert created.organization_id is None
+    assert created.organization_id == organization_id
     assert created.verified is False
     assert created.verified_by is None
     assert created.status == ShelterStatus.PREPARING
+
+
+def test_create_shelter_validates_crisis_before_creating_shelter():
+    repository = MagicMock()
+    repository.session.get.return_value = None
+    service = ShelterService(repository)
+
+    with pytest.raises(ResourceNotFoundError) as exc:
+        service.create_shelter(
+            _create_payload_for_crisis(uuid.uuid4()),
+            created_by=uuid.uuid4(),
+            organization_id=uuid.uuid4(),
+        )
+
+    assert exc.value.detail == "crisis not found"
+    repository.add.assert_not_called()
+    repository.flush.assert_not_called()
+
+
+def test_create_shelter_links_existing_crisis():
+    repository = MagicMock()
+    crisis_id = uuid.uuid4()
+    repository.session.get.return_value = Crisis(id=crisis_id)
+    service = ShelterService(repository)
+
+    created = service.create_shelter(
+        _create_payload_for_crisis(crisis_id),
+        created_by=uuid.uuid4(),
+        organization_id=uuid.uuid4(),
+    )
+
+    repository.add.assert_called_once_with(created)
+    assert any(
+        isinstance(call.args[0], CrisesShelters)
+        and call.args[0].crisis_id == crisis_id
+        and call.args[0].shelter_id == created.id
+        for call in repository.session.add.call_args_list
+    )
 
 
 def test_update_shelter_updates_only_payload_fields():

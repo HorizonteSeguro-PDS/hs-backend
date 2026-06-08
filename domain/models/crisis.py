@@ -1,9 +1,10 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     VARCHAR,
     CheckConstraint,
+    Date,
     Enum as PgEnum,
     Index,
     SmallInteger,
@@ -52,6 +53,9 @@ class Crisis(Base):
         server_default=func.gen_random_uuid(),
     )
     name: Mapped[str] = mapped_column(VARCHAR, nullable=False)
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     type: Mapped[CrisisType] = mapped_column(crisis_type_pg, nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[CrisisStatus] = mapped_column(
@@ -61,6 +65,7 @@ class Crisis(Base):
     )
     state: Mapped[BrazilianState] = mapped_column(brazilian_state_pg, nullable=False)
     city: Mapped[str] = mapped_column(VARCHAR, nullable=False)
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     severity_initial: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     severity_calculated: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     severity_calculated_at: Mapped[datetime | None] = mapped_column(
