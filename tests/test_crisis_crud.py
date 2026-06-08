@@ -109,10 +109,10 @@ class TestCreateCrisis:
         assert body["type"] == "flood"
         assert "id" in body
 
-    def test_create_as_sheltered_returns_403(self):
+    def test_create_as_shelter_manager_returns_403(self):
         app.dependency_overrides[get_session] = _session_for_create()
         response = TestClient(app).post(
-            "/crises", json=_FLOOD_PAYLOAD, headers=auth_headers("sheltered")
+            "/crises", json=_FLOOD_PAYLOAD, headers=auth_headers("shelter_manager")
         )
         assert response.status_code == 403
 
@@ -124,9 +124,23 @@ class TestListCrises:
     def teardown_method(self):
         app.dependency_overrides = {}
 
+    def test_list_is_public_no_token_needed(self):
+        """GET /crises is public — visualização não exige autenticação."""
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get("/crises")
+        assert response.status_code == 200
+
+    def test_get_one_is_public_no_token_needed(self):
+        crisis = _make_crisis()
+        app.dependency_overrides[get_session] = _session_get(crisis)
+        response = TestClient(app).get(f"/crises/{crisis.id}")
+        assert response.status_code == 200
+
     def test_empty_list(self):
         app.dependency_overrides[get_session] = _session_returning([])
-        response = TestClient(app).get("/crises", headers=auth_headers("sheltered"))
+        response = TestClient(app).get(
+            "/crises", headers=auth_headers("shelter_manager")
+        )
         assert response.status_code == 200
         assert response.json() == {
             "items": [],
@@ -178,7 +192,7 @@ class TestListCrises:
     def test_filter_by_state_param_accepted(self):
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get(
-            "/crises?state=SP", headers=auth_headers("sheltered")
+            "/crises?state=SP", headers=auth_headers("shelter_manager")
         )
         assert response.status_code == 200
 
@@ -209,7 +223,7 @@ class TestListCrises:
         monkeypatch.setattr(crisis_controller, "CrisisService", FakeCrisisService)
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get(
-            "/crises?type=flood", headers=auth_headers("sheltered")
+            "/crises?type=flood", headers=auth_headers("shelter_manager")
         )
         assert response.status_code == 200
         assert captured["type_"] == CrisisType.FLOOD
@@ -217,21 +231,21 @@ class TestListCrises:
     def test_page_must_start_at_one(self):
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get(
-            "/crises?page=0", headers=auth_headers("sheltered")
+            "/crises?page=0", headers=auth_headers("shelter_manager")
         )
         assert response.status_code == 422
 
     def test_size_has_max_limit(self):
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get(
-            "/crises?size=101", headers=auth_headers("sheltered")
+            "/crises?size=101", headers=auth_headers("shelter_manager")
         )
         assert response.status_code == 422
 
     def test_size_max_limit_is_accepted(self):
         app.dependency_overrides[get_session] = _session_returning([])
         response = TestClient(app).get(
-            "/crises?size=100", headers=auth_headers("sheltered")
+            "/crises?size=100", headers=auth_headers("shelter_manager")
         )
         assert response.status_code == 200
 
@@ -254,7 +268,7 @@ class TestGetCrisis:
         crisis = _make_crisis()
         app.dependency_overrides[get_session] = _session_get(crisis)
         response = TestClient(app).get(
-            f"/crises/{crisis.id}", headers=auth_headers("sheltered")
+            f"/crises/{crisis.id}", headers=auth_headers("shelter_manager")
         )
         assert response.status_code == 200
         assert response.json()["id"] == str(crisis.id)

@@ -5,12 +5,16 @@ Usage:
     python scripts/seed.py --reset   # delete seeded rows first
 
 Creates:
-  - 4 single-role users (dev / crisis_manager / shelter_manager / sheltered)
+  - 3 single-role users (dev / crisis_manager / shelter_manager)
   - 1 multi-role user (crisis_manager + shelter_manager) — for testing
     that require_role accepts ANY-match across the user's roles
   - sample crises authored by the dev user, scoped to the crisis_manager
     via users_crises
-  - sample shelters and M:N crisis/shelter links via crises_shelters
+  - sample shelters (with city/state/cep) and M:N crisis/shelter links
+    via crises_shelters
+
+Sheltered people are NOT modelled as USERs — they live in the BENEFICIARY
+entity (created in a future PR with endpoints).
 
 Idempotent: re-running skips rows that already exist (matched by email for
 users, by name for crises/shelters and by pair for links). Use --reset to wipe
@@ -61,16 +65,15 @@ USERS_SPEC: list[dict] = [
         "roles": [Role.SHELTER_MANAGER],
     },
     {
-        "email": "abrigado@horizonteseguro.app",
-        "name": "Pessoa Abrigada",
-        "roles": [Role.SHELTERED],
-    },
-    {
         "email": "multi@horizonteseguro.app",
         "name": "Multi-role Tester",
         "roles": [Role.CRISIS_MANAGER, Role.SHELTER_MANAGER],
     },
 ]
+
+# Emails que foram seedados em iterações anteriores e que não fazem mais parte
+# do USERS_SPEC. O --reset apaga essas linhas pra não deixarem órfãs no banco.
+LEGACY_USER_EMAILS = ["abrigado@horizonteseguro.app"]
 
 CRISES_SPEC = [
     {
@@ -150,7 +153,11 @@ SHELTERS_SPEC = [
         "created_by": None,
         "verified_by": None,
         "name": "Abrigo Comunitário Benedito Bentes",
-        "address": "Rua da Esperança, 120 - Benedito Bentes",
+        "address": "Rua da Esperança, 120",
+        "neighborhood": "Benedito Bentes",
+        "city": "Maceió",
+        "state": "AL",
+        "cep": "57084-000",
         "latitude": -9.5568,
         "longitude": -35.7327,
         "capacity": 80,
@@ -165,7 +172,11 @@ SHELTERS_SPEC = [
         "created_by": None,
         "verified_by": None,
         "name": "Escola Municipal Esperança",
-        "address": "Avenida Principal, 450 - Tabuleiro do Martins",
+        "address": "Avenida Principal, 450",
+        "neighborhood": "Tabuleiro do Martins",
+        "city": "Maceió",
+        "state": "AL",
+        "cep": "57081-100",
         "latitude": -9.5901,
         "longitude": -35.7585,
         "capacity": 150,
@@ -180,7 +191,11 @@ SHELTERS_SPEC = [
         "created_by": None,
         "verified_by": None,
         "name": "Ginásio Poliesportivo Municipal",
-        "address": "Rua do Esporte, 88 - Centro",
+        "address": "Rua do Esporte, 88",
+        "neighborhood": "Centro",
+        "city": "Salvador",
+        "state": "BA",
+        "cep": "40015-000",
         "latitude": -12.9714,
         "longitude": -38.5014,
         "capacity": 220,
@@ -195,7 +210,11 @@ SHELTERS_SPEC = [
         "created_by": None,
         "verified_by": None,
         "name": "Centro de Apoio Humanitário Nordeste",
-        "address": "Avenida Recife Solidário, 1000 - Imbiribeira",
+        "address": "Avenida Recife Solidário, 1000",
+        "neighborhood": "Imbiribeira",
+        "city": "Recife",
+        "state": "PE",
+        "cep": "51170-000",
         "latitude": -8.1087,
         "longitude": -34.9093,
         "capacity": 120,
@@ -228,7 +247,7 @@ SEEDED_SHELTER_NAMES = [s["name"] for s in SHELTERS_SPEC]
 def reset(session) -> None:
     """Wipe rows previously inserted by this seeder. Safe to run repeatedly."""
     seeded_user_rows = session.scalars(
-        select(User).where(User.email.in_(SEEDED_USER_EMAILS))
+        select(User).where(User.email.in_(SEEDED_USER_EMAILS + LEGACY_USER_EMAILS))
     ).all()
     seeded_user_ids = [u.id for u in seeded_user_rows]
     seeded_crisis_rows = session.scalars(

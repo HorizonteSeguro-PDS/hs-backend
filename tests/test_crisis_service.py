@@ -40,6 +40,8 @@ def _make_shelter() -> Shelter:
         created_by=uuid.uuid4(),
         name="Abrigo Central",
         address="Rua Principal, 100",
+        city="Sao Paulo",
+        state=BrazilianState.SP,
         capacity=100,
         occupation=25,
         shelter_type=ShelterType.INSTITUTIONAL,

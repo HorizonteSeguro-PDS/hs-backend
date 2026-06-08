@@ -49,6 +49,8 @@ def _make_shelter(name: str) -> Shelter:
         created_by=uuid.uuid4(),
         name=name,
         address="Rua Principal, 100",
+        city="Sao Paulo",
+        state=BrazilianState.SP,
         capacity=100,
         occupation=25,
         shelter_type=ShelterType.INSTITUTIONAL,
