@@ -19,6 +19,10 @@ def _shelter_payload(**kwargs) -> dict:
     return {
         "name": kwargs.get("name", "Abrigo Central"),
         "address": kwargs.get("address", "Rua Principal, 100"),
+        "neighborhood": kwargs.get("neighborhood", "Centro"),
+        "city": kwargs.get("city", "São Paulo"),
+        "state": kwargs.get("state", "SP"),
+        "cep": kwargs.get("cep", "01001-000"),
         "latitude": kwargs.get("latitude", -23.55),
         "longitude": kwargs.get("longitude", -46.63),
         "capacity": kwargs.get("capacity", 100),
@@ -36,6 +40,10 @@ def _make_shelter(**kwargs) -> Shelter:
         verified_by=kwargs.get("verified_by"),
         name=kwargs.get("name", "Abrigo Central"),
         address=kwargs.get("address", "Rua Principal, 100"),
+        neighborhood=kwargs.get("neighborhood", "Centro"),
+        city=kwargs.get("city", "São Paulo"),
+        state=kwargs.get("state", "SP"),
+        cep=kwargs.get("cep", "01001-000"),
         latitude=kwargs.get("latitude", -23.55),
         longitude=kwargs.get("longitude", -46.63),
         capacity=kwargs.get("capacity", 100),
@@ -91,9 +99,23 @@ class TestListShelters:
     def teardown_method(self):
         app.dependency_overrides = {}
 
+    def test_list_is_public_no_token_needed(self):
+        """GET /shelters is public — visualização não exige autenticação."""
+        app.dependency_overrides[get_session] = _session_returning([])
+        response = TestClient(app).get("/shelters")
+        assert response.status_code == 200
+
+    def test_get_one_is_public_no_token_needed(self):
+        shelter = _make_shelter()
+        app.dependency_overrides[get_session] = _session_get(shelter)
+        response = TestClient(app).get(f"/shelters/{shelter.id}")
+        assert response.status_code == 200
+
     def test_empty_list(self):
         app.dependency_overrides[get_session] = _session_returning([])
-        response = TestClient(app).get("/shelters", headers=auth_headers("sheltered"))
+        response = TestClient(app).get(
+            "/shelters", headers=auth_headers("crisis_manager")
+        )
 
         assert response.status_code == 200
         assert response.json() == {
@@ -209,13 +231,22 @@ class TestCreateShelter:
 
         assert response.status_code == 422
 
-    def test_create_as_sheltered_returns_403(self):
+    def test_create_as_crisis_manager_is_allowed(self):
+        """crisis_manager 'acessa tudo' — including write on shelters."""
         app.dependency_overrides[get_session] = _session_for_create()
         response = TestClient(app).post(
-            "/shelters", json=_shelter_payload(), headers=auth_headers("sheltered")
+            "/shelters",
+            json=_shelter_payload(),
+            headers=auth_headers("crisis_manager"),
         )
 
-        assert response.status_code == 403
+        assert response.status_code == 201
+
+    def test_create_without_token_returns_401(self):
+        app.dependency_overrides[get_session] = _session_for_create()
+        response = TestClient(app).post("/shelters", json=_shelter_payload())
+
+        assert response.status_code == 401
 
 
 class TestUpdateShelter:
