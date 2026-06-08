@@ -80,13 +80,15 @@ USERS_SPEC: list[dict] = [
 # do USERS_SPEC. O --reset apaga essas linhas pra não deixarem órfãs no banco.
 LEGACY_USER_EMAILS = ["abrigado@horizonteseguro.app"]
 
+# Severity na escala nova 0-3:
+#   0 = INATIVO, 1 = BAIXA, 2 = MÉDIA, 3 = ALTA
 CRISES_SPEC = [
     {
         "name": "Enchente no Vale do Taquari",
         "type": CrisisType.FLOOD,
         "state": "RS",
         "city": "Lajeado",
-        "severity_initial": 4,
+        "severity_initial": 3,
         "status": CrisisStatus.ACTIVE,
     },
     {
@@ -95,7 +97,7 @@ CRISES_SPEC = [
         "description": "Alagamentos em bairros ribeirinhos e necessidade de acolhimento emergencial.",
         "state": "AL",
         "city": "Maceió",
-        "severity_initial": 4,
+        "severity_initial": 3,
         "status": CrisisStatus.ACTIVE,
     },
     {
@@ -104,7 +106,7 @@ CRISES_SPEC = [
         "description": "Deslizamento em área de encosta com famílias desalojadas.",
         "state": "PE",
         "city": "Recife",
-        "severity_initial": 5,
+        "severity_initial": 3,
         "status": CrisisStatus.ACTIVE,
     },
     {
@@ -113,7 +115,7 @@ CRISES_SPEC = [
         "description": "Seca/estiagem prolongada com restrição de abastecimento em comunidades vulneráveis.",
         "state": "CE",
         "city": "Fortaleza",
-        "severity_initial": 3,
+        "severity_initial": 2,
         "status": CrisisStatus.ACTIVE,
     },
     {
@@ -121,7 +123,7 @@ CRISES_SPEC = [
         "type": CrisisType.FIRE,
         "state": "BA",
         "city": "Palmeiras",
-        "severity_initial": 3,
+        "severity_initial": 2,
         "status": CrisisStatus.ACTIVE,
     },
     {
@@ -129,7 +131,7 @@ CRISES_SPEC = [
         "type": CrisisType.LANDSLIDE,
         "state": "RS",
         "city": "Gramado",
-        "severity_initial": 5,
+        "severity_initial": 3,
         "status": CrisisStatus.CLOSED,
         "close_reason": "Área estabilizada e famílias reassentadas.",
     },
@@ -138,7 +140,7 @@ CRISES_SPEC = [
         "type": CrisisType.OTHER,
         "state": "CE",
         "city": "Fortaleza",
-        "severity_initial": 2,
+        "severity_initial": 1,
         "status": CrisisStatus.ACTIVE,
     },
     {
@@ -146,7 +148,7 @@ CRISES_SPEC = [
         "type": CrisisType.FLOOD,
         "state": "SP",
         "city": "São Paulo",
-        "severity_initial": 4,
+        "severity_initial": 3,
         "status": CrisisStatus.ACTIVE,
     },
 ]
