@@ -81,8 +81,6 @@ class TestRequireRole:
         assert response.status_code == 200
 
     def test_multi_role_user_no_match_rejected(self):
-        app.dependency_overrides[get_current_user] = _user(
-            Role.SHELTER_MANAGER, Role.SHELTERED
-        )
+        app.dependency_overrides[get_current_user] = _user(Role.SHELTER_MANAGER)
         response = TestClient(app).get("/dev-only")
         assert response.status_code == 403

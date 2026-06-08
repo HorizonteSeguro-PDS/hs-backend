@@ -46,10 +46,9 @@ def register_user(
     Create a new user with one or more roles.
 
     Authorization rules (see `can_create_roles`):
-      - dev             can create: dev, crisis_manager, shelter_manager, sheltered
-      - crisis_manager  can create: shelter_manager, sheltered
-      - shelter_manager can create: sheltered
-      - sheltered       can create nothing
+      - dev             can create: dev, crisis_manager, shelter_manager
+      - crisis_manager  can create: shelter_manager
+      - shelter_manager can create nothing
 
     The first dev must be bootstrapped via `scripts/seed.py`.
     """

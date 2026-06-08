@@ -92,9 +92,9 @@ class TestJwtAuth:
         )
         assert response.status_code == 200
 
-    def test_sheltered_rejected_from_dev_or_crisis_manager(self):
+    def test_shelter_manager_rejected_from_dev_or_crisis_manager(self):
         response = TestClient(_app).get(
-            "/dev-or-crisis-manager", headers=_headers("sheltered")
+            "/dev-or-crisis-manager", headers=_headers("shelter_manager")
         )
         assert response.status_code == 403
 
