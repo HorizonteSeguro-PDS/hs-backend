@@ -3,9 +3,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import OperationalError
 
+from config import settings
 from controllers.auth import router as auth_router
 from controllers.crisis import router as crisis_router
 from controllers.shelter import router as shelter_router
@@ -24,6 +26,25 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="hs-backend", docs_url=DOCS_URL, lifespan=lifespan)
+
+# --- CORS ---
+# `allow_credentials` é False propositadamente: nosso auth é via JWT em
+# Authorization header (não cookies). Isso permite usar "*" em allow_origins
+# se a env CORS_ALLOWED_ORIGINS for "*". Se um dia migrarmos pra cookies,
+# precisa flipar pra True E garantir que allow_origins é lista explícita
+# (browsers rejeitam credentials com wildcard).
+_cors_origins = settings.cors_allowed_origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins,
+    allow_origin_regex=settings.cors_allow_origin_regex,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
+    max_age=600,
+)
+logger.info("CORS allowed origins: %s", _cors_origins)
 
 app.include_router(auth_router)
 app.include_router(crisis_router)
