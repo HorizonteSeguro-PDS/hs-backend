@@ -97,11 +97,11 @@ class Crisis(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "(severity_initial IS NULL OR (severity_initial >= 1 AND severity_initial <= 5))",
+            "(severity_initial IS NULL OR (severity_initial >= 0 AND severity_initial <= 3))",
             name="ck_crises_severity_initial",
         ),
         CheckConstraint(
-            "(severity_calculated IS NULL OR (severity_calculated >= 1 AND severity_calculated <= 5))",
+            "(severity_calculated IS NULL OR (severity_calculated >= 0 AND severity_calculated <= 3))",
             name="ck_crises_severity_calculated",
         ),
         Index("ix_crises_state_city", "state", "city"),
