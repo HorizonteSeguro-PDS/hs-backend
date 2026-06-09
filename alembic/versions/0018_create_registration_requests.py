@@ -84,9 +84,32 @@ def upgrade() -> None:
         "registration_requests",
         ["email", "status"],
     )
+    op.create_index(
+        "uq_registration_requests_pending_email",
+        "registration_requests",
+        ["email"],
+        unique=True,
+        postgresql_where=sa.text("status = 'pending'"),
+    )
+    op.create_index(
+        "uq_registration_requests_pending_new_organization_name",
+        "registration_requests",
+        [sa.text("lower(new_organization_name)")],
+        unique=True,
+        postgresql_where=sa.text(
+            "status = 'pending' AND request_type = 'new_organization'"
+        ),
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        "uq_registration_requests_pending_new_organization_name",
+        table_name="registration_requests",
+    )
+    op.drop_index(
+        "uq_registration_requests_pending_email", table_name="registration_requests"
+    )
     op.drop_index(
         "ix_registration_requests_email_status", table_name="registration_requests"
     )
