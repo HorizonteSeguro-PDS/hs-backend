@@ -8,6 +8,7 @@ from services.inventory_service import (
 )
 from services.resource_category_service import ResourceCategoryService
 from services.shelter import ShelterService
+from services.shelter_spreadsheet_service import ShelterSpreadsheetService
 
 __all__ = [
     "BaseService",
@@ -16,4 +17,5 @@ __all__ = [
     "InventoryService",
     "ResourceCategoryService",
     "ShelterService",
+    "ShelterSpreadsheetService",
 ]
