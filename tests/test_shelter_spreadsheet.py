@@ -190,11 +190,9 @@ def _session_override(mock: MagicMock | None = None):
 class TestShelterSpreadsheetService:
     def test_template_has_expected_sheets_and_headers(self):
         with _setup_session() as session:
-            shelter = _seed_shelter(session)
+            _seed_shelter(session)
 
-            workbook = _load(
-                ShelterSpreadsheetService(session).build_template(shelter_id=shelter.id)
-            )
+            workbook = _load(ShelterSpreadsheetService(session).build_template())
 
             resource_headers = [cell.value for cell in workbook[RESOURCE_SHEET][1]]
             assert workbook.sheetnames == [RESOURCE_SHEET, PEOPLE_SHEET]
@@ -206,11 +204,9 @@ class TestShelterSpreadsheetService:
 
     def test_template_applies_basic_readability_styles(self):
         with _setup_session() as session:
-            shelter = _seed_shelter(session)
+            _seed_shelter(session)
 
-            workbook = _load(
-                ShelterSpreadsheetService(session).build_template(shelter_id=shelter.id)
-            )
+            workbook = _load(ShelterSpreadsheetService(session).build_template())
             resources = workbook[RESOURCE_SHEET]
             people = workbook[PEOPLE_SHEET]
 
@@ -583,14 +579,13 @@ class TestShelterSpreadsheetController:
         app.dependency_overrides = {}
 
     def test_template_download_returns_xlsx(self, monkeypatch):
-        shelter_id = uuid.uuid4()
         content = _workbook_bytes([])
 
         class FakeShelterSpreadsheetService:
             def __init__(self, session):
                 self.session = session
 
-            def build_template(self, *, shelter_id):
+            def build_template(self):
                 return content
 
         monkeypatch.setattr(
@@ -601,7 +596,7 @@ class TestShelterSpreadsheetController:
         app.dependency_overrides[get_session] = _session_override()
 
         response = TestClient(app).get(
-            f"/shelters/{shelter_id}/spreadsheet/template",
+            "/shelters/spreadsheet/template",
             headers=auth_headers("shelter_manager"),
         )
 
@@ -611,6 +606,10 @@ class TestShelterSpreadsheetController:
             response.headers["content-type"] == spreadsheet_controller.XLSX_MEDIA_TYPE
         )
         assert "attachment;" in response.headers["content-disposition"]
+        assert (
+            "shelter-spreadsheet-template.xlsx"
+            in response.headers["content-disposition"]
+        )
         assert [cell.value for cell in workbook[RESOURCE_SHEET][1]] == RESOURCE_HEADERS
         assert [cell.value for cell in workbook[PEOPLE_SHEET][1]] == PEOPLE_HEADERS
 

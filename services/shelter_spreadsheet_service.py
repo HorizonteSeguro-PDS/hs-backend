@@ -97,8 +97,7 @@ class ShelterSpreadsheetService:
         self.categories = ResourceCategoryRepository(session)
         self.inventory = InventoryService(session)
 
-    def build_template(self, *, shelter_id: UUID) -> bytes:
-        self._ensure_shelter_exists(shelter_id)
+    def build_template(self) -> bytes:
         workbook = self._create_workbook()
         return self._to_bytes(workbook)
 

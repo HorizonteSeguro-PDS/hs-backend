@@ -24,16 +24,15 @@ _UploadDep = Annotated[UploadFile, File()]
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
-@router.get("/{shelter_id}/spreadsheet/template")
+@router.get("/spreadsheet/template")
 def download_template(
-    shelter_id: UUID,
     session: _SessionDep,
     _user: _AnyAuth,
 ) -> StreamingResponse:
-    content = ShelterSpreadsheetService(session).build_template(shelter_id=shelter_id)
+    content = ShelterSpreadsheetService(session).build_template()
     return _xlsx_response(
         content,
-        filename=f"shelter-{shelter_id}-template.xlsx",
+        filename="shelter-spreadsheet-template.xlsx",
     )
 
 
