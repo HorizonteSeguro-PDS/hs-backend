@@ -321,10 +321,12 @@ def approve_registration_request(
         session.flush()
     except IntegrityError as exc:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="email already registered",
-        ) from exc
+        if "uq_users_email" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="email already registered",
+            ) from exc
+        raise
 
     for role in roles:
         grant_role(session, user_id=user.id, role=role)
