@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Integer, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, Integer, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,6 +14,9 @@ class InventoryItem(Base):
     NOT a movement log — `inventory_movements` holds the history. This row is
     a derived cache updated by `record_movement`. There is at most one row per
     (shelter_id, category_id) — enforced by the unique index.
+
+    `quantity_max` é o teto desejado pra esse item naquele abrigo (NULL = sem
+    teto definido). Drives o status Sufficient/Low/Critical no dashboard.
     """
 
     __tablename__ = "inventory_items"
@@ -30,6 +33,7 @@ class InventoryItem(Base):
     quantity_current: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    quantity_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True),
         server_default=func.now(),
@@ -42,5 +46,9 @@ class InventoryItem(Base):
             "shelter_id",
             "category_id",
             name="one_snapshot_per_shelter_category",
+        ),
+        CheckConstraint(
+            "(quantity_max IS NULL OR quantity_max > 0)",
+            name="ck_inventory_items_quantity_max_positive",
         ),
     )

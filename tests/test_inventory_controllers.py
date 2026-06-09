@@ -41,6 +41,7 @@ class TestResourceCategoryController:
                         "id": category_id,
                         "name": "cobertor",
                         "unit": "unidade",
+                        "lot_category": "bedding",
                         "description": None,
                     }
                 ]
@@ -72,6 +73,7 @@ class TestResourceCategoryController:
                     "id": category_id,
                     "name": payload.name,
                     "unit": payload.unit,
+                    "lot_category": payload.lot_category,
                     "description": payload.description,
                 }
 
@@ -84,7 +86,12 @@ class TestResourceCategoryController:
 
         response = TestClient(app).post(
             "/resource-categories",
-            json={"name": "agua", "unit": "L", "description": None},
+            json={
+                "name": "agua",
+                "unit": "L",
+                "lot_category": "water",
+                "description": None,
+            },
             headers=auth_headers("crisis_manager"),
         )
 

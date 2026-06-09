@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from domain.models.resource_category import ResourceCategory
-from domain.schemas.enums import ResourceUnit
+from domain.schemas.enums import LotCategory, ResourceUnit
 from repositories import ResourceCategoryRepository
 
 
@@ -15,7 +15,13 @@ def _create_tables(engine) -> None:
 def _make_category(
     name: str, unit: ResourceUnit = ResourceUnit.UNIDADE
 ) -> ResourceCategory:
-    return ResourceCategory(id=uuid.uuid4(), name=name, unit=unit, description=None)
+    return ResourceCategory(
+        id=uuid.uuid4(),
+        name=name,
+        unit=unit,
+        lot_category=LotCategory.OTHER,
+        description=None,
+    )
 
 
 def test_get_by_name_finds_exact_match():
