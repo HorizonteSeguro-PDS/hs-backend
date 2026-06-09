@@ -24,6 +24,7 @@ the seeded rows first.
 import argparse
 import sys
 from pathlib import Path
+from uuid import UUID, uuid4
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -32,23 +33,32 @@ from sqlalchemy import delete, select  # noqa: E402
 from domain.auth.enums import Role  # noqa: E402
 from domain.crisis.enums import CrisisStatus, CrisisType  # noqa: E402
 from domain.models.audit_log import AuditLog  # noqa: E402, F401 — registers metadata
+from domain.models.beneficiary import Beneficiary  # noqa: E402
 from domain.models.crises_shelters import CrisesShelters  # noqa: E402
 from domain.models.crisis import Crisis  # noqa: E402
+from domain.models.inventory_item import InventoryItem  # noqa: E402
+from domain.models.inventory_movement import InventoryMovement  # noqa: E402
 from domain.models.resource_category import ResourceCategory  # noqa: E402
 from domain.models.shelter import Shelter  # noqa: E402
+from domain.models.shelter_stay import ShelterStay  # noqa: E402
 from domain.models.user import User  # noqa: E402
 from domain.models.user_role import UserRole  # noqa: E402
 from domain.models.users_crises import UsersCrises  # noqa: E402
 from domain.schemas.enums import (  # noqa: E402
+    MovementDirection,
+    MovementReason,
     ResourceUnit,
     ShelterStatus,
     ShelterType,
+    VulnerabilityType,
 )
+from domain.inventory.schemas import InventoryMovementCreateRequest  # noqa: E402
 from services.auth_service import (  # noqa: E402
     create_access_token,
     grant_role,
     hash_password,
 )
+from services.inventory_service import InventoryService  # noqa: E402
 from utils.database import SessionLocal  # noqa: E402
 
 DEFAULT_PASSWORD = "admin1234"
@@ -153,6 +163,9 @@ CRISES_SPEC = [
     },
 ]
 
+DEMO_FULL_SHELTER_ID = UUID("7d70e036-99d7-4aeb-9ed8-1a81aaca43d0")
+DEMO_FULL_SHELTER_NAME = "Ginásio Poliesportivo Municipal"
+
 SHELTERS_SPEC = [
     {
         "organization_id": None,
@@ -193,11 +206,12 @@ SHELTERS_SPEC = [
         "verified": True,
     },
     {
+        "id": DEMO_FULL_SHELTER_ID,
         "organization_id": None,
         "responsible_user_id": None,
         "created_by": None,
         "verified_by": None,
-        "name": "Ginásio Poliesportivo Municipal",
+        "name": DEMO_FULL_SHELTER_NAME,
         "address": "Rua do Esporte, 88",
         "neighborhood": "Centro",
         "city": "Salvador",
@@ -272,10 +286,56 @@ CATEGORIES_SPEC: list[tuple[str, ResourceUnit, str]] = [
     ("doacao_dinheiro", ResourceUnit.REAL, "Doação em dinheiro pra logística"),
 ]
 
+DEMO_FULL_SHELTER_INVENTORY: dict[str, int] = {
+    "agua_potavel": 1800,
+    "cobertor": 260,
+    "colchao": 140,
+    "kit_medico_basico": 45,
+    "kit_higiene_pessoal": 180,
+    "fralda_descartavel": 70,
+    "fralda_geriatrica": 38,
+    "absorvente": 95,
+    "alimento_nao_perecivel": 920,
+    "racao_animal": 160,
+    "doacao_dinheiro": 12500,
+}
+
+BENEFICIARIES_SPEC: list[dict] = [
+    {
+        "cpf": "100.000.000-01",
+        "name": "Maria das Dores Silva",
+        "age": 72,
+        "vulnerability": VulnerabilityType.ELDERLY,
+        "notes": "Usa medicação contínua; priorizar acesso ao posto médico.",
+    },
+    {
+        "cpf": "100.000.000-02",
+        "name": "Ana Clara Santos",
+        "age": 29,
+        "vulnerability": VulnerabilityType.PREGNANT,
+        "notes": "Gestante; acompanhamento semanal solicitado.",
+    },
+    {
+        "cpf": "100.000.000-03",
+        "name": "João Pedro Almeida",
+        "age": 8,
+        "vulnerability": VulnerabilityType.CHILD,
+        "notes": "Criança acompanhada pela responsável Maria Almeida.",
+    },
+    {
+        "cpf": "100.000.000-04",
+        "name": "Carlos Henrique Lima",
+        "age": 41,
+        "vulnerability": VulnerabilityType.DISABLED,
+        "notes": "Pessoa com mobilidade reduzida; acomodado próximo à saída.",
+    },
+]
+
 SEEDED_USER_EMAILS = [u["email"] for u in USERS_SPEC]
 SEEDED_CRISIS_NAMES = [c["name"] for c in CRISES_SPEC]
 SEEDED_SHELTER_NAMES = [s["name"] for s in SHELTERS_SPEC]
 SEEDED_CATEGORY_NAMES = [name for name, _, _ in CATEGORIES_SPEC]
+SEEDED_BENEFICIARY_CPFS = [person["cpf"] for person in BENEFICIARIES_SPEC]
 
 
 def reset(session) -> None:
@@ -292,7 +352,34 @@ def reset(session) -> None:
         select(Shelter).where(Shelter.name.in_(SEEDED_SHELTER_NAMES))
     ).all()
     seeded_shelter_ids = [s.id for s in seeded_shelter_rows]
+    seeded_beneficiary_rows = session.scalars(
+        select(Beneficiary).where(Beneficiary.cpf.in_(SEEDED_BENEFICIARY_CPFS))
+    ).all()
+    seeded_beneficiary_ids = [b.id for b in seeded_beneficiary_rows]
 
+    if seeded_shelter_ids:
+        session.execute(
+            delete(InventoryMovement).where(
+                InventoryMovement.shelter_id.in_(seeded_shelter_ids)
+            )
+        )
+        session.execute(
+            delete(InventoryItem).where(
+                InventoryItem.shelter_id.in_(seeded_shelter_ids)
+            )
+        )
+        session.execute(
+            delete(ShelterStay).where(ShelterStay.shelter_id.in_(seeded_shelter_ids))
+        )
+    if seeded_beneficiary_ids:
+        session.execute(
+            delete(ShelterStay).where(
+                ShelterStay.beneficiary_id.in_(seeded_beneficiary_ids)
+            )
+        )
+        session.execute(
+            delete(Beneficiary).where(Beneficiary.id.in_(seeded_beneficiary_ids))
+        )
     if seeded_crisis_ids:
         session.execute(
             delete(CrisesShelters).where(
@@ -323,7 +410,10 @@ def reset(session) -> None:
         delete(ResourceCategory).where(ResourceCategory.name.in_(SEEDED_CATEGORY_NAMES))
     )
     session.commit()
-    print("[seed] reset: deleted seeded users, crises, shelters, grants, categories.")
+    print(
+        "[seed] reset: deleted seeded users, crises, shelters, grants, "
+        "inventory, beneficiaries, categories."
+    )
 
 
 def seed_users(session) -> dict[str, tuple[User, list[Role]]]:
@@ -437,6 +527,99 @@ def seed_categories(session) -> list[ResourceCategory]:
     else:
         print("[seed] all sample resource categories already exist.")
     return rows
+
+
+def seed_demo_full_shelter(
+    session,
+    *,
+    shelters: list[Shelter],
+    categories: list[ResourceCategory],
+    actor_id,
+) -> None:
+    shelters_by_name = {s.name: s for s in shelters}
+    categories_by_name = {c.name: c for c in categories}
+    shelter = shelters_by_name.get(DEMO_FULL_SHELTER_NAME)
+    if shelter is None:
+        raise RuntimeError(
+            f"Seed full shelter references unknown shelter: {DEMO_FULL_SHELTER_NAME!r}."
+        )
+
+    inventory_service = InventoryService(session)
+    resources_created = 0
+    for category_name, quantity in DEMO_FULL_SHELTER_INVENTORY.items():
+        category = categories_by_name.get(category_name)
+        if category is None:
+            raise RuntimeError(
+                f"Seed inventory references unknown category: {category_name!r}."
+            )
+
+        existing_item = inventory_service.items.get_for_shelter_category(
+            shelter_id=shelter.id,
+            category_id=category.id,
+        )
+        if existing_item is not None:
+            continue
+
+        inventory_service.record_movement(
+            shelter_id=shelter.id,
+            actor_id=actor_id,
+            payload=InventoryMovementCreateRequest(
+                category_id=category.id,
+                direction=MovementDirection.IN,
+                quantity=quantity,
+                reason=MovementReason.DONATION,
+                source="seed",
+                notes="Seed inicial para demonstracao de planilha do abrigo.",
+            ),
+        )
+        resources_created += 1
+
+    people_created = 0
+    stays_created = 0
+    for spec in BENEFICIARIES_SPEC:
+        beneficiary = session.scalar(
+            select(Beneficiary).where(Beneficiary.cpf == spec["cpf"])
+        )
+        if beneficiary is None:
+            beneficiary = Beneficiary(
+                id=uuid4(),
+                user_id=None,
+                cpf=spec["cpf"],
+                name=spec["name"],
+                age=spec["age"],
+                vulnerability=spec["vulnerability"],
+                notes=spec["notes"],
+            )
+            session.add(beneficiary)
+            session.flush()
+            people_created += 1
+
+        open_stay = session.scalar(
+            select(ShelterStay).where(
+                ShelterStay.beneficiary_id == beneficiary.id,
+                ShelterStay.shelter_id == shelter.id,
+                ShelterStay.checked_out_at.is_(None),
+            )
+        )
+        if open_stay is None:
+            session.add(
+                ShelterStay(
+                    id=uuid4(),
+                    beneficiary_id=beneficiary.id,
+                    shelter_id=shelter.id,
+                )
+            )
+            stays_created += 1
+
+    if resources_created or people_created or stays_created:
+        print(
+            "[seed] demo shelter populated: "
+            f"{resources_created} resources, "
+            f"{people_created} people, "
+            f"{stays_created} active stays."
+        )
+    else:
+        print("[seed] demo shelter inventory and people already exist.")
 
 
 def grant_scope(session, *, crisis_manager_user_id, crises: list[Crisis]) -> None:
@@ -563,7 +746,15 @@ def run(reset_first: bool) -> int:
             link_crises_shelters(session, crises=crises, shelters=shelters)
             session.commit()
 
-            seed_categories(session)
+            categories = seed_categories(session)
+            session.commit()
+
+            seed_demo_full_shelter(
+                session,
+                shelters=shelters,
+                categories=categories,
+                actor_id=dev_user.id,
+            )
             session.commit()
 
             print_credentials(users)
