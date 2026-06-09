@@ -1,8 +1,14 @@
 """GET /crises/{crisis_id}/operations — mega-payload do dashboard do gestor.
 
-NAO é publico: contem CPF (PII). Requer JWT com pelo menos um dos papeis
-dev / crisis_manager / shelter_manager. Filtro por organization_id aplicado
-no service (dev passa por cima).
+PUBLICO (não exige token). O front controla visibilidade de botões de
+gerenciamento (criar movement / fazer check-in / etc) por role, mas a
+LEITURA do dashboard fica aberta — bate com o painel de transparência.
+
+ATENÇÃO: o payload inclui CPF dos beneficiários (PII). Se isso passar a
+ser um problema (LGPD), considere:
+  - mascarar CPF no array `people` quando não tem auth, OU
+  - omitir `people` completamente em chamadas anônimas, OU
+  - voltar a exigir token só pra `people`.
 """
 
 from typing import Annotated
@@ -11,7 +17,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from dependencies.auth import CurrentUser, require_role
 from dependencies.session import get_session
 from domain.operations.schemas import CrisisOperationsResponse
 from services.operations import OperationsService
@@ -19,9 +24,6 @@ from services.operations import OperationsService
 
 router = APIRouter(prefix="/crises", tags=["crises"])
 
-_AuthDep = Annotated[
-    CurrentUser, Depends(require_role("dev", "crisis_manager", "shelter_manager"))
-]
 _SessionDep = Annotated[Session, Depends(get_session)]
 
 
@@ -29,22 +31,15 @@ _SessionDep = Annotated[Session, Depends(get_session)]
     "/{crisis_id}/operations",
     response_model=CrisisOperationsResponse,
     responses={
-        401: {"description": "missing/invalid bearer token"},
-        403: {"description": "role not authorized"},
         404: {"description": "crisis not found"},
     },
 )
 def get_crisis_operations(
     crisis_id: UUID,
     session: _SessionDep,
-    user: _AuthDep,
 ) -> CrisisOperationsResponse:
-    """Mega-payload do dashboard de gestor de abrigos.
+    """Mega-payload do dashboard de gestor de abrigos — público.
 
     Estrutura: crisis -> shelters[] -> {supplies, resources, people}.
-
-    Scoping (no service):
-      - dev: ve todos shelters
-      - crisis_manager / shelter_manager: ve so os shelters da propria org
     """
-    return OperationsService(session).get_crisis_operations(crisis_id, user)
+    return OperationsService(session).get_crisis_operations(crisis_id)

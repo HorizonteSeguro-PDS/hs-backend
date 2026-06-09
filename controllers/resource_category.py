@@ -11,6 +11,7 @@ from domain.inventory.schemas import (
     ResourceCategoryRead,
     ResourceCategoryUpdateRequest,
 )
+from domain.schemas.enums import LotCategory
 from repositories import ResourceCategoryRepository
 from services import ResourceCategoryService
 
@@ -22,8 +23,19 @@ _SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.get("", response_model=list[ResourceCategoryRead])
-def list_categories(session: _SessionDep) -> list[ResourceCategoryRead]:
+def list_categories(
+    session: _SessionDep,
+    lot_category: Annotated[LotCategory | None, Query()] = None,
+) -> list[ResourceCategoryRead]:
+    """Lista todas as categorias, ou filtra por `lot_category` se fornecido.
+
+    Usado pelos modais de inflow/outflow do front pra popular o dropdown de
+    "tipo de recurso" depois do gestor escolher o grupo (Essenciais / Saude /
+    etc).
+    """
     service = ResourceCategoryService(ResourceCategoryRepository(session))
+    if lot_category is not None:
+        return service.list_by_lot_category(lot_category)
     return service.list_all()
 
 

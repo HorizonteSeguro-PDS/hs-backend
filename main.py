@@ -17,6 +17,7 @@ from controllers.registration_request import router as registration_request_rout
 from controllers.resource_category import router as resource_category_router
 from controllers.shelter import router as shelter_router
 from controllers.shelter_spreadsheet import router as shelter_spreadsheet_router
+from controllers.shelter_stay import router as shelter_stay_router
 from controllers.user import router as user_router
 
 # Piggyback on uvicorn's configured error logger — `hs-backend` would have no
@@ -68,6 +69,7 @@ app.include_router(registration_request_router)
 app.include_router(resource_category_router)
 app.include_router(shelter_router)
 app.include_router(shelter_spreadsheet_router)
+app.include_router(shelter_stay_router)
 app.include_router(user_router)
 
 

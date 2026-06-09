@@ -91,6 +91,12 @@ class InventoryMovementCreateRequest(BaseModel):
 
     `created_by` vem do JWT, não do body.
 
+    `reason` é opcional: se omitido, default por direção:
+      - IN  -> DONATION
+      - OUT -> DISTRIBUTION
+    O front pode mandar reason explicito (ex: TRANSFER_OUT, ADJUSTMENT)
+    quando quiser sobrescrever o default.
+
     `destination_shelter_id` deve ser preenchido APENAS em transferencias
     pra outro abrigo (direction=OUT, reason=TRANSFER_OUT). O CHECK no banco
     duplica essa amarra como ultima linha de defesa.
@@ -101,10 +107,20 @@ class InventoryMovementCreateRequest(BaseModel):
     category_id: UUID
     direction: MovementDirection
     quantity: int = Field(gt=0, description="Quantidade positiva (>0)")
-    reason: MovementReason
+    reason: MovementReason | None = None
     source: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=2000)
     destination_shelter_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def _default_reason_by_direction(self) -> "InventoryMovementCreateRequest":
+        if self.reason is None:
+            self.reason = (
+                MovementReason.DONATION
+                if self.direction == MovementDirection.IN
+                else MovementReason.DISTRIBUTION
+            )
+        return self
 
     @model_validator(mode="after")
     def _destination_only_on_transfer_out(self) -> "InventoryMovementCreateRequest":
@@ -174,3 +190,49 @@ class ShelterSpreadsheetImportResponse(BaseModel):
     people_imported: int = 0
     people_skipped: bool = True
     errors: list[str] = Field(default_factory=list)
+
+
+# ---------- Initial stock (Modal 1: criar tipo novo + primeira entrada) -- #
+
+
+class InitialStockCategorySpec(BaseModel):
+    """Bloco aninhado dentro de InitialStockRequest — define a categoria
+    nova que vai ser criada junto com a primeira entrada.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    unit: ResourceUnit
+    lot_category: LotCategory
+    description: str | None = Field(default=None, max_length=500)
+
+
+class InitialStockRequest(BaseModel):
+    """Payload do POST /shelters/{id}/inventory/initial-stock.
+
+    Cria uma `ResourceCategory` nova + abre o primeiro `InventoryItem` no
+    abrigo + grava `InventoryMovement` IN com `reason=donation`, tudo em
+    uma transação. Pensado pra o "modal de entrada de recurso especial":
+    o gestor registra um item que o sistema nunca viu antes.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    category: InitialStockCategorySpec
+    quantity: int = Field(
+        gt=0, description="Quantidade inicial em estoque (primeira entrada)."
+    )
+    source: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class InitialStockResponse(BaseModel):
+    """Tudo que foi criado pela operação atômica."""
+
+    category: ResourceCategoryRead
+    item: InventoryItemRead
+    movement: InventoryMovementRead
+    inventory_after: int = Field(
+        ge=0, description="Saldo de quantity_current após a operação."
+    )

@@ -296,48 +296,190 @@ CRISIS_SHELTER_LINKS = {
 }
 
 # (name, unit, lot_category, description)
+# Taxonomia de 32 itens em 6 grupos (LotCategory) combinada com o front.
+# Migration 0021 renomeia os 5 nomes que mudaram em relacao ao seed antigo;
+# pra contornar instalações que rodaram seeds anteriores, a lista
+# LEGACY_CATEGORY_NAMES limpa esses nomes em --reset.
 CATEGORIES_SPEC: list[tuple[str, ResourceUnit, LotCategory, str]] = [
-    ("agua_potavel", ResourceUnit.L, LotCategory.WATER, "Água potável engarrafada"),
-    ("cobertor", ResourceUnit.UNIDADE, LotCategory.BEDDING, "Cobertor adulto"),
-    ("colchao", ResourceUnit.UNIDADE, LotCategory.BEDDING, "Colchão de campanha"),
+    # ESSENCIAIS
+    ("alimento", ResourceUnit.KG, LotCategory.ESSENCIAIS, "Alimentos não-perecíveis"),
     (
-        "kit_medico_basico",
-        ResourceUnit.UNIDADE,
-        LotCategory.MEDICINE,
-        "Curativo, antitérmico, soro fisiológico",
+        "agua_potavel",
+        ResourceUnit.L,
+        LotCategory.ESSENCIAIS,
+        "Água potável engarrafada",
     ),
+    ("roupa", ResourceUnit.UNIDADE, LotCategory.ESSENCIAIS, "Peça de vestuário"),
+    ("cobertor", ResourceUnit.UNIDADE, LotCategory.ESSENCIAIS, "Cobertor adulto"),
+    ("colchao", ResourceUnit.UNIDADE, LotCategory.ESSENCIAIS, "Colchão de campanha"),
     (
-        "kit_higiene_pessoal",
+        "kit_higiene",
         ResourceUnit.UNIDADE,
-        LotCategory.HYGIENE,
+        LotCategory.ESSENCIAIS,
         "Escova, pasta, sabonete, toalha",
     ),
     (
-        "fralda_descartavel",
+        "kit_limpeza",
         ResourceUnit.UNIDADE,
-        LotCategory.HYGIENE,
-        "Bebê — pacote",
+        LotCategory.ESSENCIAIS,
+        "Detergente, sabão, álcool, água sanitária",
+    ),
+    # SAUDE
+    (
+        "medicamento",
+        ResourceUnit.UNIDADE,
+        LotCategory.SAUDE,
+        "Caixa/unidade de medicamento",
+    ),
+    (
+        "material_medico",
+        ResourceUnit.UNIDADE,
+        LotCategory.SAUDE,
+        "Material médico-hospitalar (curativo, soro, etc.)",
+    ),
+    (
+        "primeiros_socorros",
+        ResourceUnit.UNIDADE,
+        LotCategory.SAUDE,
+        "Kit de primeiros socorros",
+    ),
+    (
+        "servico_saude",
+        ResourceUnit.UNIDADE,
+        LotCategory.SAUDE,
+        "Atendimentos médicos disponíveis",
+    ),
+    (
+        "servico_psicologico",
+        ResourceUnit.UNIDADE,
+        LotCategory.SAUDE,
+        "Atendimentos psicológicos disponíveis",
+    ),
+    # INFANTIL_E_IDOSOS
+    (
+        "fralda_infantil",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFANTIL_E_IDOSOS,
+        "Pacote de fraldas infantis",
     ),
     (
         "fralda_geriatrica",
         ResourceUnit.UNIDADE,
-        LotCategory.HYGIENE,
-        "Adulto — pacote",
+        LotCategory.INFANTIL_E_IDOSOS,
+        "Pacote de fraldas geriátricas",
     ),
-    ("absorvente", ResourceUnit.UNIDADE, LotCategory.HYGIENE, "Pacote padrão"),
     (
-        "alimento_nao_perecivel",
-        ResourceUnit.KG,
-        LotCategory.FOOD,
-        "Arroz, feijão, açúcar, óleo, etc.",
+        "absorvente",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFANTIL_E_IDOSOS,
+        "Pacote de absorventes",
     ),
-    ("racao_animal", ResourceUnit.KG, LotCategory.ANIMAL, "Ração para cães e gatos"),
     (
-        "doacao_dinheiro",
+        "brinquedo_infantil",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFANTIL_E_IDOSOS,
+        "Brinquedo infantil",
+    ),
+    # ANIMAIS
+    ("racao_animal", ResourceUnit.KG, LotCategory.ANIMAIS, "Ração para cães e gatos"),
+    (
+        "caixa_transporte_animal",
+        ResourceUnit.UNIDADE,
+        LotCategory.ANIMAIS,
+        "Caixa para transporte de animais",
+    ),
+    (
+        "servico_veterinario",
+        ResourceUnit.UNIDADE,
+        LotCategory.ANIMAIS,
+        "Atendimentos veterinários disponíveis",
+    ),
+    # INFRAESTRUTURA
+    (
+        "lanterna",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFRAESTRUTURA,
+        "Lanterna a pilha",
+    ),
+    (
+        "pilha_bateria",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFRAESTRUTURA,
+        "Pilhas e baterias",
+    ),
+    (
+        "carregador",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFRAESTRUTURA,
+        "Carregador de celular",
+    ),
+    (
+        "power_bank",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFRAESTRUTURA,
+        "Bateria portátil",
+    ),
+    (
+        "gerador",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFRAESTRUTURA,
+        "Gerador elétrico",
+    ),
+    ("lona", ResourceUnit.UNIDADE, LotCategory.INFRAESTRUTURA, "Lona plástica"),
+    (
+        "tenda_barraca",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFRAESTRUTURA,
+        "Tenda ou barraca",
+    ),
+    (
+        "botijao_gas",
+        ResourceUnit.UNIDADE,
+        LotCategory.INFRAESTRUTURA,
+        "Botijão de gás (13kg)",
+    ),
+    # OPERACAO
+    (
+        "voluntario",
+        ResourceUnit.UNIDADE,
+        LotCategory.OPERACAO,
+        "Voluntários ativos",
+    ),
+    (
+        "transporte",
+        ResourceUnit.UNIDADE,
+        LotCategory.OPERACAO,
+        "Veículos de transporte disponíveis",
+    ),
+    (
+        "equipamento_resgate",
+        ResourceUnit.UNIDADE,
+        LotCategory.OPERACAO,
+        "Equipamento de resgate",
+    ),
+    (
+        "material_sinalizacao",
+        ResourceUnit.UNIDADE,
+        LotCategory.OPERACAO,
+        "Material de sinalização",
+    ),
+    (
+        "doacao_financeira",
         ResourceUnit.REAL,
-        LotCategory.MONEY,
-        "Doação em dinheiro pra logística",
+        LotCategory.OPERACAO,
+        "Doação financeira pra logística",
     ),
+]
+
+# Nomes que existiam em seeds anteriores e foram renomeados pela 0021.
+# O --reset apaga essas linhas (caso a migration nao tenha rodado ou tenha
+# falhado) pra evitar duplicatas com os nomes novos.
+LEGACY_CATEGORY_NAMES = [
+    "alimento",
+    "kit_higiene",
+    "fralda_infantil",
+    "material_medico",
+    "doacao_financeira",
 ]
 
 # -------------------------------------------------------------------------- #
@@ -347,28 +489,28 @@ CATEGORIES_SPEC: list[tuple[str, ResourceUnit, LotCategory, str]] = [
 # (shelter_name, category_name, quantity_current, quantity_max)
 INVENTORY_ITEMS_SPEC: list[tuple[str, str, int, int | None]] = [
     # Benedito Bentes — escassez geral
-    ("Abrigo Comunitário Benedito Bentes", "alimento_nao_perecivel", 300, 1000),
+    ("Abrigo Comunitário Benedito Bentes", "alimento", 300, 1000),
     ("Abrigo Comunitário Benedito Bentes", "agua_potavel", 200, 500),
     ("Abrigo Comunitário Benedito Bentes", "cobertor", 40, 80),
-    ("Abrigo Comunitário Benedito Bentes", "kit_higiene_pessoal", 15, 80),
-    ("Abrigo Comunitário Benedito Bentes", "kit_medico_basico", 20, 30),
+    ("Abrigo Comunitário Benedito Bentes", "kit_higiene", 15, 80),
+    ("Abrigo Comunitário Benedito Bentes", "material_medico", 20, 30),
     # Escola Esperança — melhor situacao
-    ("Escola Municipal Esperança", "alimento_nao_perecivel", 800, 1500),
+    ("Escola Municipal Esperança", "alimento", 800, 1500),
     ("Escola Municipal Esperança", "agua_potavel", 350, 1000),
     ("Escola Municipal Esperança", "cobertor", 60, 100),
     ("Escola Municipal Esperança", "colchao", 40, 80),
-    ("Escola Municipal Esperança", "kit_medico_basico", 5, 30),
+    ("Escola Municipal Esperança", "material_medico", 5, 30),
     # Ginásio Salvador (DEMO_FULL_SHELTER) — agua critica + 4 categorias seedadas
     # AQUI. As outras 7 entram via seed_demo_full_shelter / record_movement.
-    (DEMO_FULL_SHELTER_NAME, "alimento_nao_perecivel", 600, 2000),
+    (DEMO_FULL_SHELTER_NAME, "alimento", 600, 2000),
     (DEMO_FULL_SHELTER_NAME, "agua_potavel", 100, 1500),
     (DEMO_FULL_SHELTER_NAME, "colchao", 80, 150),
-    (DEMO_FULL_SHELTER_NAME, "fralda_descartavel", 30, 100),
+    (DEMO_FULL_SHELTER_NAME, "fralda_infantil", 30, 100),
     # Centro Humanitário Recife — equilibrado
-    ("Centro de Apoio Humanitário Nordeste", "alimento_nao_perecivel", 400, 1000),
+    ("Centro de Apoio Humanitário Nordeste", "alimento", 400, 1000),
     ("Centro de Apoio Humanitário Nordeste", "agua_potavel", 350, 600),
-    ("Centro de Apoio Humanitário Nordeste", "kit_medico_basico", 25, 40),
-    ("Centro de Apoio Humanitário Nordeste", "kit_higiene_pessoal", 50, 100),
+    ("Centro de Apoio Humanitário Nordeste", "material_medico", 25, 40),
+    ("Centro de Apoio Humanitário Nordeste", "kit_higiene", 50, 100),
 ]
 
 # -------------------------------------------------------------------------- #
@@ -390,7 +532,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     # Benedito Bentes
     (
         "Abrigo Comunitário Benedito Bentes",
-        "alimento_nao_perecivel",
+        "alimento",
         MovementDirection.IN,
         100,
         MovementReason.DONATION,
@@ -408,7 +550,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     ),
     (
         "Abrigo Comunitário Benedito Bentes",
-        "alimento_nao_perecivel",
+        "alimento",
         MovementDirection.OUT,
         30,
         MovementReason.DISTRIBUTION,
@@ -417,7 +559,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     ),
     (
         "Abrigo Comunitário Benedito Bentes",
-        "kit_higiene_pessoal",
+        "kit_higiene",
         MovementDirection.OUT,
         20,
         MovementReason.DISTRIBUTION,
@@ -436,7 +578,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     # Escola Esperança
     (
         "Escola Municipal Esperança",
-        "alimento_nao_perecivel",
+        "alimento",
         MovementDirection.IN,
         200,
         MovementReason.DONATION,
@@ -463,7 +605,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     ),
     (
         "Escola Municipal Esperança",
-        "alimento_nao_perecivel",
+        "alimento",
         MovementDirection.OUT,
         50,
         MovementReason.DISTRIBUTION,
@@ -473,7 +615,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     # Ginásio Salvador
     (
         DEMO_FULL_SHELTER_NAME,
-        "alimento_nao_perecivel",
+        "alimento",
         MovementDirection.IN,
         500,
         MovementReason.DONATION,
@@ -491,7 +633,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     ),
     (
         DEMO_FULL_SHELTER_NAME,
-        "fralda_descartavel",
+        "fralda_infantil",
         MovementDirection.OUT,
         50,
         MovementReason.DISTRIBUTION,
@@ -510,7 +652,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     # Centro Humanitário Recife
     (
         "Centro de Apoio Humanitário Nordeste",
-        "alimento_nao_perecivel",
+        "alimento",
         MovementDirection.IN,
         200,
         MovementReason.DONATION,
@@ -537,7 +679,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     ),
     (
         "Centro de Apoio Humanitário Nordeste",
-        "kit_higiene_pessoal",
+        "kit_higiene",
         MovementDirection.OUT,
         30,
         MovementReason.DISTRIBUTION,
@@ -556,14 +698,14 @@ DEMO_FULL_SHELTER_INVENTORY: dict[str, int] = {
     "agua_potavel": 1800,
     "cobertor": 260,
     "colchao": 140,
-    "kit_medico_basico": 45,
-    "kit_higiene_pessoal": 180,
-    "fralda_descartavel": 70,
+    "material_medico": 45,
+    "kit_higiene": 180,
+    "fralda_infantil": 70,
     "fralda_geriatrica": 38,
     "absorvente": 95,
-    "alimento_nao_perecivel": 920,
+    "alimento": 920,
     "racao_animal": 160,
-    "doacao_dinheiro": 12500,
+    "doacao_financeira": 12500,
 }
 
 # -------------------------------------------------------------------------- #
@@ -865,7 +1007,9 @@ def reset(session) -> None:
 
     # Resource categories sao compartilhadas; apaga so as seedadas.
     session.execute(
-        delete(ResourceCategory).where(ResourceCategory.name.in_(SEEDED_CATEGORY_NAMES))
+        delete(ResourceCategory).where(
+            ResourceCategory.name.in_(SEEDED_CATEGORY_NAMES + LEGACY_CATEGORY_NAMES)
+        )
     )
 
     # Organization demo — nao tem model, apaga via SQL.

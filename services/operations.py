@@ -1,14 +1,17 @@
 """Service do dashboard de gestor de abrigos.
 
-Um unico metodo publico: `get_crisis_operations(crisis_id, viewer)`. Carrega
-tudo em poucas queries, aplica scope por organization_id, e devolve o
-CrisisOperationsResponse aninhado.
+Um unico metodo publico: `get_crisis_operations(crisis_id, viewer=None)`.
+Carrega tudo em poucas queries e devolve o CrisisOperationsResponse aninhado.
 
-Scoping rules:
-  - dev                            -> ve todos os shelters da crise
-  - crisis_manager, shelter_manager-> ve so shelters da MESMA organization_id
-                                       do viewer (se viewer.organization_id é
-                                       None, devolve lista vazia de shelters)
+Scoping (opcional):
+  - `viewer=None` (padrao do endpoint publico) -> sem filtro, devolve tudo.
+  - viewer com Role.DEV                        -> sem filtro, devolve tudo.
+  - viewer sem Role.DEV                        -> filtra shelters por
+                                                  organization_id == viewer.org.
+                                                  Viewer sem org_id vê vazio.
+
+O controller publico nao passa viewer. A logica de scoping fica aqui pra o
+caso de a gente querer reintroduzir auth no futuro sem mexer no service.
 """
 
 from uuid import UUID
@@ -96,7 +99,9 @@ class OperationsService:
         self.session = session
 
     def get_crisis_operations(
-        self, crisis_id: UUID, viewer: CurrentUser
+        self,
+        crisis_id: UUID,
+        viewer: CurrentUser | None = None,
     ) -> CrisisOperationsResponse:
         crisis = self.session.scalar(
             select(Crisis)
@@ -139,14 +144,13 @@ class OperationsService:
     # ------------------------------------------------------------------ #
 
     def _filter_shelters_for_viewer(
-        self, shelters: list[Shelter], viewer: CurrentUser
+        self, shelters: list[Shelter], viewer: CurrentUser | None
     ) -> list[Shelter]:
-        """Dev vê tudo; demais roles ficam restritos à propria organization_id.
-
-        Se o viewer nao tem organization_id (e nao é dev), ele nao vê NADA —
-        retorna lista vazia. Isso evita vazamento acidental.
+        """Anonimo / dev vê tudo; demais roles ficam restritos à propria
+        organization_id. Viewer NAO-dev sem organization_id retorna lista
+        vazia pra evitar vazamento acidental.
         """
-        if not _is_org_scoped(viewer):
+        if viewer is None or not _is_org_scoped(viewer):
             return shelters
         if viewer.organization_id is None:
             return []

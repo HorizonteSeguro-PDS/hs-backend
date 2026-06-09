@@ -7,6 +7,7 @@ from domain.inventory.schemas import (
     ResourceCategoryUpdateRequest,
 )
 from domain.models.resource_category import ResourceCategory
+from domain.schemas.enums import LotCategory
 from repositories.resource_category import ResourceCategoryRepository
 from services.base import BaseService
 
@@ -26,6 +27,15 @@ class ResourceCategoryService(BaseService[ResourceCategory]):
 
     def list_all(self) -> list[ResourceCategoryRead]:
         items = self.repository.list()
+        return [ResourceCategoryRead.model_validate(it) for it in items]
+
+    def list_by_lot_category(
+        self, lot_category: LotCategory
+    ) -> list[ResourceCategoryRead]:
+        """Filtra categorias por bucket (Essenciais/Saude/etc) — usado pelos
+        dropdowns dos modais de entrada/saida de recurso.
+        """
+        items = self.repository.list_by_lot_category(lot_category)
         return [ResourceCategoryRead.model_validate(it) for it in items]
 
     def search(self, query: str, *, limit: int = 20) -> list[ResourceCategoryRead]:
@@ -48,6 +58,7 @@ class ResourceCategoryService(BaseService[ResourceCategory]):
         category = ResourceCategory(
             name=payload.name,
             unit=payload.unit,
+            lot_category=payload.lot_category,
             description=payload.description,
         )
         self.repository.add(category)
