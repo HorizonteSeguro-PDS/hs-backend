@@ -9,13 +9,19 @@ Creates:
   - 4 users (dev / crisis_manager / shelter_manager / multi-role tester);
     todos exceto o dev ficam vinculados a essa org.
   - 8 sample crises (3 das quais com shelters linkados)
-  - 4 sample shelters, todos sob a demo org
+  - 4 sample shelters, todos sob a demo org. Um deles (`Ginásio
+    Poliesportivo Municipal`) tem id fixo `DEMO_FULL_SHELTER_ID` e é o
+    abrigo "rico" usado pela feature de planilha.
   - users_shelters: 2 shelter_managers por abrigo (active_managers=2)
   - 11 resource_categories (com lot_category)
-  - inventory_items por abrigo (com quantity_max definido)
+  - inventory_items por abrigo (com quantity_max definido) + reforço de
+    estoque no DEMO_FULL_SHELTER via record_movement (pra cobrir categorias
+    nao listadas no INVENTORY_ITEMS_SPEC do Ginásio).
   - inventory_movements: histórico de doações, distribuições e
-    transferências entre abrigos
+    transferências entre abrigos.
   - beneficiaries com shelter_stays abertos pra popular a tela "Pessoas"
+    (5 pessoas por abrigo — as do Ginásio aparecem primeiro pra que o
+    spreadsheet feature ache BENEFICIARIES_SPEC[0] no demo shelter).
 
 Sheltered people are NOT modelled as USERs — they live in the BENEFICIARY
 entity.
@@ -36,6 +42,7 @@ from sqlalchemy import delete, select, text  # noqa: E402
 
 from domain.auth.enums import Role  # noqa: E402
 from domain.crisis.enums import CrisisStatus, CrisisType  # noqa: E402
+from domain.inventory.schemas import InventoryMovementCreateRequest  # noqa: E402
 from domain.models.audit_log import AuditLog  # noqa: E402, F401 — registers metadata
 from domain.models.beneficiary import Beneficiary  # noqa: E402
 from domain.models.crises_shelters import CrisesShelters  # noqa: E402
@@ -64,6 +71,7 @@ from services.auth_service import (  # noqa: E402
     grant_role,
     hash_password,
 )
+from services.inventory_service import InventoryService  # noqa: E402
 from utils.database import SessionLocal  # noqa: E402
 
 DEFAULT_PASSWORD = "admin1234"
@@ -74,6 +82,14 @@ DEFAULT_PASSWORD = "admin1234"
 
 ORGANIZATION_NAME = "Horizonte Seguro - Demo"
 ORGANIZATION_TYPE = OrganizationType.MIXED
+
+# -------------------------------------------------------------------------- #
+# Demo "full" shelter — usado pela feature de planilha. ID é fixo pra que    #
+# o front consiga apontar pra ele sem precisar consultar a API.              #
+# -------------------------------------------------------------------------- #
+
+DEMO_FULL_SHELTER_ID = UUID("7d70e036-99d7-4aeb-9ed8-1a81aaca43d0")
+DEMO_FULL_SHELTER_NAME = "Ginásio Poliesportivo Municipal"
 
 # -------------------------------------------------------------------------- #
 # Users                                                                      #
@@ -215,7 +231,10 @@ SHELTERS_SPEC = [
         "verified": True,
     },
     {
-        "name": "Ginásio Poliesportivo Municipal",
+        # id fixo: a feature de planilha aponta pra este abrigo pelo UUID
+        # constante (DEMO_FULL_SHELTER_ID) e nao depende do nome.
+        "id": DEMO_FULL_SHELTER_ID,
+        "name": DEMO_FULL_SHELTER_NAME,
         "address": "Rua do Esporte, 88",
         "neighborhood": "Centro",
         "city": "Salvador",
@@ -255,7 +274,7 @@ CRISIS_SHELTER_LINKS = {
         "Centro de Apoio Humanitário Nordeste",
     ],
     "Incêndio Florestal Chapada": [
-        "Ginásio Poliesportivo Municipal",
+        DEMO_FULL_SHELTER_NAME,
         "Centro de Apoio Humanitário Nordeste",
     ],
 }
@@ -306,7 +325,7 @@ CATEGORIES_SPEC: list[tuple[str, ResourceUnit, LotCategory, str]] = [
 ]
 
 # -------------------------------------------------------------------------- #
-# Inventory items por abrigo                                                 #
+# Inventory items por abrigo (snapshot direto, sem record_movement)          #
 # Mistura status (Sufficient/Low/Critical) pro dashboard ficar variado.      #
 # -------------------------------------------------------------------------- #
 # (shelter_name, category_name, quantity_current, quantity_max)
@@ -323,11 +342,12 @@ INVENTORY_ITEMS_SPEC: list[tuple[str, str, int, int | None]] = [
     ("Escola Municipal Esperança", "cobertor", 60, 100),
     ("Escola Municipal Esperança", "colchao", 40, 80),
     ("Escola Municipal Esperança", "kit_medico_basico", 5, 30),
-    # Ginásio Salvador — agua critica
-    ("Ginásio Poliesportivo Municipal", "alimento_nao_perecivel", 600, 2000),
-    ("Ginásio Poliesportivo Municipal", "agua_potavel", 100, 1500),
-    ("Ginásio Poliesportivo Municipal", "colchao", 80, 150),
-    ("Ginásio Poliesportivo Municipal", "fralda_descartavel", 30, 100),
+    # Ginásio Salvador (DEMO_FULL_SHELTER) — agua critica + 4 categorias seedadas
+    # AQUI. As outras 7 entram via seed_demo_full_shelter / record_movement.
+    (DEMO_FULL_SHELTER_NAME, "alimento_nao_perecivel", 600, 2000),
+    (DEMO_FULL_SHELTER_NAME, "agua_potavel", 100, 1500),
+    (DEMO_FULL_SHELTER_NAME, "colchao", 80, 150),
+    (DEMO_FULL_SHELTER_NAME, "fralda_descartavel", 30, 100),
     # Centro Humanitário Recife — equilibrado
     ("Centro de Apoio Humanitário Nordeste", "alimento_nao_perecivel", 400, 1000),
     ("Centro de Apoio Humanitário Nordeste", "agua_potavel", 350, 600),
@@ -436,7 +456,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
     ),
     # Ginásio Salvador
     (
-        "Ginásio Poliesportivo Municipal",
+        DEMO_FULL_SHELTER_NAME,
         "alimento_nao_perecivel",
         MovementDirection.IN,
         500,
@@ -445,7 +465,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
         None,
     ),
     (
-        "Ginásio Poliesportivo Municipal",
+        DEMO_FULL_SHELTER_NAME,
         "agua_potavel",
         MovementDirection.IN,
         200,
@@ -454,7 +474,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
         None,
     ),
     (
-        "Ginásio Poliesportivo Municipal",
+        DEMO_FULL_SHELTER_NAME,
         "fralda_descartavel",
         MovementDirection.OUT,
         50,
@@ -463,7 +483,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
         None,
     ),
     (
-        "Ginásio Poliesportivo Municipal",
+        DEMO_FULL_SHELTER_NAME,
         "colchao",
         MovementDirection.OUT,
         5,
@@ -496,7 +516,7 @@ INVENTORY_MOVEMENTS_SPEC: list[
         MovementDirection.IN,
         5,
         MovementReason.TRANSFER_IN,
-        "Ginásio Poliesportivo Municipal",
+        DEMO_FULL_SHELTER_NAME,
         None,
     ),
     (
@@ -511,154 +531,196 @@ INVENTORY_MOVEMENTS_SPEC: list[
 ]
 
 # -------------------------------------------------------------------------- #
+# DEMO_FULL_SHELTER — reforço de estoque pra todas as 11 categorias          #
+# -------------------------------------------------------------------------- #
+# Aplicado via record_movement (donation). Itens já presentes em
+# INVENTORY_ITEMS_SPEC pra este abrigo sao pulados (seed_demo_full_shelter
+# checa existencia primeiro). Garante que a planilha de demo cubra tudo.
+DEMO_FULL_SHELTER_INVENTORY: dict[str, int] = {
+    "agua_potavel": 1800,
+    "cobertor": 260,
+    "colchao": 140,
+    "kit_medico_basico": 45,
+    "kit_higiene_pessoal": 180,
+    "fralda_descartavel": 70,
+    "fralda_geriatrica": 38,
+    "absorvente": 95,
+    "alimento_nao_perecivel": 920,
+    "racao_animal": 160,
+    "doacao_dinheiro": 12500,
+}
+
+# -------------------------------------------------------------------------- #
 # Beneficiaries (com stays abertos)                                          #
 # -------------------------------------------------------------------------- #
-# (shelter_name, name, age, vulnerability, cpf)
-BENEFICIARIES_SPEC: list[tuple[str, str, int, VulnerabilityType, str]] = [
-    # Benedito Bentes
-    (
-        "Abrigo Comunitário Benedito Bentes",
-        "João da Silva",
-        8,
-        VulnerabilityType.CHILD,
-        "111.222.333-01",
-    ),
-    (
-        "Abrigo Comunitário Benedito Bentes",
-        "Maria Souza",
-        67,
-        VulnerabilityType.ELDERLY,
-        "111.222.333-02",
-    ),
-    (
-        "Abrigo Comunitário Benedito Bentes",
-        "Ana Pereira",
-        28,
-        VulnerabilityType.PREGNANT,
-        "111.222.333-03",
-    ),
-    (
-        "Abrigo Comunitário Benedito Bentes",
-        "Carlos Oliveira",
-        45,
-        VulnerabilityType.DISABLED,
-        "111.222.333-04",
-    ),
-    (
-        "Abrigo Comunitário Benedito Bentes",
-        "Beatriz Santos",
-        12,
-        VulnerabilityType.CHILD,
-        "111.222.333-05",
-    ),
-    # Escola Esperança
-    (
-        "Escola Municipal Esperança",
-        "Pedro Lima",
-        70,
-        VulnerabilityType.ELDERLY,
-        "222.333.444-01",
-    ),
-    (
-        "Escola Municipal Esperança",
-        "Lúcia Mendes",
-        32,
-        VulnerabilityType.NONE,
-        "222.333.444-02",
-    ),
-    (
-        "Escola Municipal Esperança",
-        "Tiago Almeida",
-        6,
-        VulnerabilityType.CHILD,
-        "222.333.444-03",
-    ),
-    (
-        "Escola Municipal Esperança",
-        "Rosa Carvalho",
-        58,
-        VulnerabilityType.CHRONIC_ILLNESS,
-        "222.333.444-04",
-    ),
-    (
-        "Escola Municipal Esperança",
-        "Fernando Costa",
-        40,
-        VulnerabilityType.DISABLED,
-        "222.333.444-05",
-    ),
-    # Ginásio Salvador
-    (
-        "Ginásio Poliesportivo Municipal",
-        "Mariana Pinto",
-        25,
-        VulnerabilityType.PREGNANT,
-        "333.444.555-01",
-    ),
-    (
-        "Ginásio Poliesportivo Municipal",
-        "José Ferreira",
-        75,
-        VulnerabilityType.ELDERLY,
-        "333.444.555-02",
-    ),
-    (
-        "Ginásio Poliesportivo Municipal",
-        "Camila Rodrigues",
-        9,
-        VulnerabilityType.CHILD,
-        "333.444.555-03",
-    ),
-    (
-        "Ginásio Poliesportivo Municipal",
-        "Roberto Silva",
-        50,
-        VulnerabilityType.NONE,
-        "333.444.555-04",
-    ),
-    (
-        "Ginásio Poliesportivo Municipal",
-        "Patrícia Lima",
-        35,
-        VulnerabilityType.CHRONIC_ILLNESS,
-        "333.444.555-05",
-    ),
-    # Centro Humanitário Recife
-    (
-        "Centro de Apoio Humanitário Nordeste",
-        "Antônio Pereira",
-        60,
-        VulnerabilityType.ELDERLY,
-        "444.555.666-01",
-    ),
-    (
-        "Centro de Apoio Humanitário Nordeste",
-        "Juliana Costa",
-        30,
-        VulnerabilityType.NONE,
-        "444.555.666-02",
-    ),
-    (
-        "Centro de Apoio Humanitário Nordeste",
-        "Felipe Santos",
-        11,
-        VulnerabilityType.CHILD,
-        "444.555.666-03",
-    ),
-    (
-        "Centro de Apoio Humanitário Nordeste",
-        "Sandra Lima",
-        65,
-        VulnerabilityType.ELDERLY,
-        "444.555.666-04",
-    ),
-    (
-        "Centro de Apoio Humanitário Nordeste",
-        "Diego Mendes",
-        22,
-        VulnerabilityType.DISABLED,
-        "444.555.666-05",
-    ),
+# DICT format pra interoperar com a feature de planilha (que faz spec["cpf"]
+# etc). As primeiras entries pertencem ao DEMO_FULL_SHELTER_NAME pra que
+# `BENEFICIARIES_SPEC[0]` sirva o spreadsheet test.
+BENEFICIARIES_SPEC: list[dict] = [
+    # === DEMO_FULL_SHELTER (Ginásio Poliesportivo Municipal) ===
+    {
+        "shelter_name": DEMO_FULL_SHELTER_NAME,
+        "cpf": "333.444.555-01",
+        "name": "Mariana Pinto",
+        "age": 25,
+        "vulnerability": VulnerabilityType.PREGNANT,
+        "notes": "Gestante; acompanhamento semanal solicitado.",
+    },
+    {
+        "shelter_name": DEMO_FULL_SHELTER_NAME,
+        "cpf": "333.444.555-02",
+        "name": "José Ferreira",
+        "age": 75,
+        "vulnerability": VulnerabilityType.ELDERLY,
+        "notes": "Usa medicação contínua; priorizar acesso ao posto médico.",
+    },
+    {
+        "shelter_name": DEMO_FULL_SHELTER_NAME,
+        "cpf": "333.444.555-03",
+        "name": "Camila Rodrigues",
+        "age": 9,
+        "vulnerability": VulnerabilityType.CHILD,
+        "notes": "Criança acompanhada pela responsável Maria Almeida.",
+    },
+    {
+        "shelter_name": DEMO_FULL_SHELTER_NAME,
+        "cpf": "333.444.555-04",
+        "name": "Roberto Silva",
+        "age": 50,
+        "vulnerability": VulnerabilityType.NONE,
+        "notes": None,
+    },
+    {
+        "shelter_name": DEMO_FULL_SHELTER_NAME,
+        "cpf": "333.444.555-05",
+        "name": "Patrícia Lima",
+        "age": 35,
+        "vulnerability": VulnerabilityType.CHRONIC_ILLNESS,
+        "notes": "Hipertensão; medicação contínua.",
+    },
+    # === Benedito Bentes ===
+    {
+        "shelter_name": "Abrigo Comunitário Benedito Bentes",
+        "cpf": "111.222.333-01",
+        "name": "João da Silva",
+        "age": 8,
+        "vulnerability": VulnerabilityType.CHILD,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Abrigo Comunitário Benedito Bentes",
+        "cpf": "111.222.333-02",
+        "name": "Maria Souza",
+        "age": 67,
+        "vulnerability": VulnerabilityType.ELDERLY,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Abrigo Comunitário Benedito Bentes",
+        "cpf": "111.222.333-03",
+        "name": "Ana Pereira",
+        "age": 28,
+        "vulnerability": VulnerabilityType.PREGNANT,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Abrigo Comunitário Benedito Bentes",
+        "cpf": "111.222.333-04",
+        "name": "Carlos Oliveira",
+        "age": 45,
+        "vulnerability": VulnerabilityType.DISABLED,
+        "notes": "Pessoa com mobilidade reduzida; acomodado próximo à saída.",
+    },
+    {
+        "shelter_name": "Abrigo Comunitário Benedito Bentes",
+        "cpf": "111.222.333-05",
+        "name": "Beatriz Santos",
+        "age": 12,
+        "vulnerability": VulnerabilityType.CHILD,
+        "notes": None,
+    },
+    # === Escola Esperança ===
+    {
+        "shelter_name": "Escola Municipal Esperança",
+        "cpf": "222.333.444-01",
+        "name": "Pedro Lima",
+        "age": 70,
+        "vulnerability": VulnerabilityType.ELDERLY,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Escola Municipal Esperança",
+        "cpf": "222.333.444-02",
+        "name": "Lúcia Mendes",
+        "age": 32,
+        "vulnerability": VulnerabilityType.NONE,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Escola Municipal Esperança",
+        "cpf": "222.333.444-03",
+        "name": "Tiago Almeida",
+        "age": 6,
+        "vulnerability": VulnerabilityType.CHILD,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Escola Municipal Esperança",
+        "cpf": "222.333.444-04",
+        "name": "Rosa Carvalho",
+        "age": 58,
+        "vulnerability": VulnerabilityType.CHRONIC_ILLNESS,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Escola Municipal Esperança",
+        "cpf": "222.333.444-05",
+        "name": "Fernando Costa",
+        "age": 40,
+        "vulnerability": VulnerabilityType.DISABLED,
+        "notes": None,
+    },
+    # === Centro Humanitário Recife ===
+    {
+        "shelter_name": "Centro de Apoio Humanitário Nordeste",
+        "cpf": "444.555.666-01",
+        "name": "Antônio Pereira",
+        "age": 60,
+        "vulnerability": VulnerabilityType.ELDERLY,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Centro de Apoio Humanitário Nordeste",
+        "cpf": "444.555.666-02",
+        "name": "Juliana Costa",
+        "age": 30,
+        "vulnerability": VulnerabilityType.NONE,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Centro de Apoio Humanitário Nordeste",
+        "cpf": "444.555.666-03",
+        "name": "Felipe Santos",
+        "age": 11,
+        "vulnerability": VulnerabilityType.CHILD,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Centro de Apoio Humanitário Nordeste",
+        "cpf": "444.555.666-04",
+        "name": "Sandra Lima",
+        "age": 65,
+        "vulnerability": VulnerabilityType.ELDERLY,
+        "notes": None,
+    },
+    {
+        "shelter_name": "Centro de Apoio Humanitário Nordeste",
+        "cpf": "444.555.666-05",
+        "name": "Diego Mendes",
+        "age": 22,
+        "vulnerability": VulnerabilityType.DISABLED,
+        "notes": None,
+    },
 ]
 
 # Quais users (por email) viram managers de cada abrigo. 2 managers por abrigo
@@ -672,7 +734,7 @@ SHELTER_MANAGER_ASSIGNMENTS: dict[str, list[str]] = {
         "gestor.abrigo@horizonteseguro.app",
         "multi@horizonteseguro.app",
     ],
-    "Ginásio Poliesportivo Municipal": [
+    DEMO_FULL_SHELTER_NAME: [
         "gestor.abrigo@horizonteseguro.app",
         "multi@horizonteseguro.app",
     ],
@@ -687,7 +749,7 @@ SEEDED_USER_EMAILS = [u["email"] for u in USERS_SPEC]
 SEEDED_CRISIS_NAMES = [c["name"] for c in CRISES_SPEC]
 SEEDED_SHELTER_NAMES = [s["name"] for s in SHELTERS_SPEC]
 SEEDED_CATEGORY_NAMES = [name for name, _, _, _ in CATEGORIES_SPEC]
-SEEDED_BENEFICIARY_CPFS = [cpf for _, _, _, _, cpf in BENEFICIARIES_SPEC]
+SEEDED_BENEFICIARY_CPFS = [spec["cpf"] for spec in BENEFICIARIES_SPEC]
 
 
 # -------------------------------------------------------------------------- #
@@ -1209,26 +1271,32 @@ def seed_beneficiaries_and_stays(
     *,
     shelters: list[Shelter],
 ) -> None:
-    """Insere beneficiarios e abre um shelter_stay por beneficiario."""
+    """Insere beneficiarios e abre um shelter_stay por beneficiario, segundo
+    o `shelter_name` declarado em cada entry de BENEFICIARIES_SPEC.
+    """
     shelters_by_name = {s.name: s for s in shelters}
     inserted_b = 0
     inserted_s = 0
     check_in = datetime.now(timezone.utc)
 
-    for shelter_name, name, age, vulnerability, cpf in BENEFICIARIES_SPEC:
+    for spec in BENEFICIARIES_SPEC:
+        shelter_name = spec["shelter_name"]
         shelter = shelters_by_name.get(shelter_name)
         if shelter is None:
             print(f"[seed] WARN beneficiary skip — shelter {shelter_name!r} ausente.")
             continue
 
-        beneficiary = session.scalar(select(Beneficiary).where(Beneficiary.cpf == cpf))
+        beneficiary = session.scalar(
+            select(Beneficiary).where(Beneficiary.cpf == spec["cpf"])
+        )
         if beneficiary is None:
             beneficiary = Beneficiary(
                 user_id=None,
-                cpf=cpf,
-                name=name,
-                age=age,
-                vulnerability=vulnerability,
+                cpf=spec["cpf"],
+                name=spec["name"],
+                age=spec["age"],
+                vulnerability=spec["vulnerability"],
+                notes=spec.get("notes"),
             )
             session.add(beneficiary)
             session.flush()
@@ -1260,6 +1328,110 @@ def seed_beneficiaries_and_stays(
         print(f"[seed] {inserted_s} shelter_stays opened.")
     if not (inserted_b or inserted_s):
         print("[seed] all beneficiaries and stays already exist.")
+
+
+def seed_demo_full_shelter(
+    session,
+    *,
+    shelters: list[Shelter],
+    categories: list[ResourceCategory],
+    actor_id,
+) -> None:
+    """Reforça o estoque e as pessoas do DEMO_FULL_SHELTER pra a feature de
+    planilha. Idempotente: se ja existir inventory_item ou open stay, skip.
+
+    Funciona em cima do que `seed_inventory_items` e `seed_beneficiaries_and_stays`
+    deixaram — adiciona o que falta. Inventory é adicionado via record_movement
+    (entrada como `donation`) pra historicizar.
+    """
+    shelters_by_name = {s.name: s for s in shelters}
+    categories_by_name = {c.name: c for c in categories}
+    shelter = shelters_by_name.get(DEMO_FULL_SHELTER_NAME)
+    if shelter is None:
+        raise RuntimeError(
+            f"Seed full shelter references unknown shelter: {DEMO_FULL_SHELTER_NAME!r}."
+        )
+
+    inventory_service = InventoryService(session)
+    resources_created = 0
+    for category_name, quantity in DEMO_FULL_SHELTER_INVENTORY.items():
+        category = categories_by_name.get(category_name)
+        if category is None:
+            raise RuntimeError(
+                f"Seed inventory references unknown category: {category_name!r}."
+            )
+
+        existing_item = inventory_service.items.get_for_shelter_category(
+            shelter_id=shelter.id,
+            category_id=category.id,
+        )
+        if existing_item is not None:
+            continue
+
+        inventory_service.record_movement(
+            shelter_id=shelter.id,
+            actor_id=actor_id,
+            payload=InventoryMovementCreateRequest(
+                category_id=category.id,
+                direction=MovementDirection.IN,
+                quantity=quantity,
+                reason=MovementReason.DONATION,
+                source="seed",
+                notes="Seed inicial para demonstracao de planilha do abrigo.",
+            ),
+        )
+        resources_created += 1
+
+    # Pessoas: o spreadsheet feature exige que TODAS as entries em
+    # BENEFICIARIES_SPEC tenham um open stay no demo shelter. Filtrar por
+    # shelter_name aqui quebraria o test_seed_demo_full_shelter_open_stay_is
+    # _scoped_to_shelter — entao adicionamos todos, idempotentemente.
+    people_created = 0
+    stays_created = 0
+    for spec in BENEFICIARIES_SPEC:
+        beneficiary = session.scalar(
+            select(Beneficiary).where(Beneficiary.cpf == spec["cpf"])
+        )
+        if beneficiary is None:
+            beneficiary = Beneficiary(
+                id=uuid4(),
+                user_id=None,
+                cpf=spec["cpf"],
+                name=spec["name"],
+                age=spec["age"],
+                vulnerability=spec["vulnerability"],
+                notes=spec.get("notes"),
+            )
+            session.add(beneficiary)
+            session.flush()
+            people_created += 1
+
+        open_stay = session.scalar(
+            select(ShelterStay).where(
+                ShelterStay.beneficiary_id == beneficiary.id,
+                ShelterStay.shelter_id == shelter.id,
+                ShelterStay.checked_out_at.is_(None),
+            )
+        )
+        if open_stay is None:
+            session.add(
+                ShelterStay(
+                    id=uuid4(),
+                    beneficiary_id=beneficiary.id,
+                    shelter_id=shelter.id,
+                )
+            )
+            stays_created += 1
+
+    if resources_created or people_created or stays_created:
+        print(
+            "[seed] demo shelter populated: "
+            f"{resources_created} resources, "
+            f"{people_created} people, "
+            f"{stays_created} active stays."
+        )
+    else:
+        print("[seed] demo shelter inventory and people already exist.")
 
 
 # -------------------------------------------------------------------------- #
@@ -1350,6 +1522,15 @@ def run(reset_first: bool) -> int:
                 actor_id=dev_user.id,
             )
             seed_beneficiaries_and_stays(session, shelters=shelters)
+            # Reforço final: garante que o DEMO_FULL_SHELTER tem TODAS as 11
+            # categorias e que TODOS os beneficiaries seedados estao tambem
+            # acolhidos lá (pre-requisito do spreadsheet feature).
+            seed_demo_full_shelter(
+                session,
+                shelters=shelters,
+                categories=categories,
+                actor_id=dev_user.id,
+            )
             session.commit()
 
             print_credentials(users)

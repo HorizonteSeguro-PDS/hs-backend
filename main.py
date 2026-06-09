@@ -14,12 +14,14 @@ from controllers.inventory import router as inventory_router
 from controllers.operations import router as operations_router
 from controllers.resource_category import router as resource_category_router
 from controllers.shelter import router as shelter_router
+from controllers.shelter_spreadsheet import router as shelter_spreadsheet_router
 from controllers.user import router as user_router
 
 # Piggyback on uvicorn's configured error logger — `hs-backend` would have no
 # handler attached and the message would silently drop on the floor.
 logger = logging.getLogger("uvicorn.error")
 DOCS_URL = "/api/docs"
+OPENAPI_URL = "/api/openapi.json"
 
 
 @asynccontextmanager
@@ -28,7 +30,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="hs-backend", docs_url=DOCS_URL, lifespan=lifespan)
+app = FastAPI(
+    title="hs-backend",
+    docs_url=DOCS_URL,
+    openapi_url=OPENAPI_URL,
+    swagger_ui_oauth2_redirect_url=f"{DOCS_URL}/oauth2-redirect",
+    lifespan=lifespan,
+)
 
 # --- CORS ---
 # `allow_credentials` é False propositadamente: nosso auth é via JWT em
@@ -55,6 +63,7 @@ app.include_router(inventory_router)
 app.include_router(operations_router)
 app.include_router(resource_category_router)
 app.include_router(shelter_router)
+app.include_router(shelter_spreadsheet_router)
 app.include_router(user_router)
 
 
