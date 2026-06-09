@@ -90,17 +90,23 @@ def upgrade() -> None:
     )
 
     # Backfill pelas 11 categorias conhecidas.
+    #
+    # Cast explicito :bucket::lot_category é obrigatório — psycopg manda o
+    # bindparam como VARCHAR e o Postgres nao auto-converte VARCHAR pra enum
+    # custom (DatatypeMismatch). Literais inline (tipo 'water') o parser
+    # entende sozinho.
     for name, bucket in _SEEDED_CATEGORY_BUCKETS:
         op.execute(
             sa.text(
-                "UPDATE resource_categories SET lot_category = :bucket "
+                "UPDATE resource_categories "
+                "SET lot_category = CAST(:bucket AS lot_category) "
                 "WHERE name = :name"
             ).bindparams(bucket=bucket, name=name)
         )
 
     # Fallback pra qualquer categoria que tenha sido inserida fora do seed.
     op.execute(
-        "UPDATE resource_categories SET lot_category = 'other' "
+        "UPDATE resource_categories SET lot_category = 'other'::lot_category "
         "WHERE lot_category IS NULL"
     )
 

@@ -5,45 +5,59 @@ Usage:
     python scripts/seed.py --reset   # delete seeded rows first
 
 Creates:
-  - 3 single-role users (dev / crisis_manager / shelter_manager)
-  - 1 multi-role user (crisis_manager + shelter_manager) — for testing
-    that require_role accepts ANY-match across the user's roles
-  - sample crises authored by the dev user, scoped to the crisis_manager
-    via users_crises
-  - sample shelters (with city/state/cep) and M:N crisis/shelter links
-    via crises_shelters
+  - 1 demo organization (Horizonte Seguro - Demo)
+  - 4 users (dev / crisis_manager / shelter_manager / multi-role tester);
+    todos exceto o dev ficam vinculados a essa org.
+  - 8 sample crises (3 das quais com shelters linkados)
+  - 4 sample shelters, todos sob a demo org
+  - users_shelters: 2 shelter_managers por abrigo (active_managers=2)
+  - 11 resource_categories (com lot_category)
+  - inventory_items por abrigo (com quantity_max definido)
+  - inventory_movements: histórico de doações, distribuições e
+    transferências entre abrigos
+  - beneficiaries com shelter_stays abertos pra popular a tela "Pessoas"
 
 Sheltered people are NOT modelled as USERs — they live in the BENEFICIARY
-entity (created in a future PR with endpoints).
+entity.
 
-Idempotent: re-running skips rows that already exist (matched by email for
-users, by name for crises/shelters and by pair for links). Use --reset to wipe
-the seeded rows first.
+Idempotent: re-running skips rows que já existem (matched by email/name/cpf).
+Use --reset pra wipar tudo antes.
 """
 
 import argparse
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import UUID, uuid4
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy import delete, select  # noqa: E402
+from sqlalchemy import delete, select, text  # noqa: E402
 
 from domain.auth.enums import Role  # noqa: E402
 from domain.crisis.enums import CrisisStatus, CrisisType  # noqa: E402
 from domain.models.audit_log import AuditLog  # noqa: E402, F401 — registers metadata
+from domain.models.beneficiary import Beneficiary  # noqa: E402
 from domain.models.crises_shelters import CrisesShelters  # noqa: E402
 from domain.models.crisis import Crisis  # noqa: E402
+from domain.models.inventory_item import InventoryItem  # noqa: E402
+from domain.models.inventory_movement import InventoryMovement  # noqa: E402
 from domain.models.resource_category import ResourceCategory  # noqa: E402
 from domain.models.shelter import Shelter  # noqa: E402
+from domain.models.shelter_stay import ShelterStay  # noqa: E402
 from domain.models.user import User  # noqa: E402
 from domain.models.user_role import UserRole  # noqa: E402
 from domain.models.users_crises import UsersCrises  # noqa: E402
+from domain.models.users_shelters import UsersShelters  # noqa: E402
 from domain.schemas.enums import (  # noqa: E402
     LotCategory,
+    MovementDirection,
+    MovementReason,
+    OrganizationType,
     ResourceUnit,
     ShelterStatus,
     ShelterType,
+    VulnerabilityType,
 )
 from services.auth_service import (  # noqa: E402
     create_access_token,
@@ -54,26 +68,41 @@ from utils.database import SessionLocal  # noqa: E402
 
 DEFAULT_PASSWORD = "admin1234"
 
+# -------------------------------------------------------------------------- #
+# Organization                                                               #
+# -------------------------------------------------------------------------- #
+
+ORGANIZATION_NAME = "Horizonte Seguro - Demo"
+ORGANIZATION_TYPE = OrganizationType.MIXED
+
+# -------------------------------------------------------------------------- #
+# Users                                                                      #
+# -------------------------------------------------------------------------- #
+
 USERS_SPEC: list[dict] = [
     {
         "email": "admin@horizonteseguro.app",
         "name": "Admin Dev",
         "roles": [Role.DEV],
+        "assign_to_org": False,  # dev é global, sem org
     },
     {
         "email": "gestor.crise@horizonteseguro.app",
         "name": "Gestor de Crise",
         "roles": [Role.CRISIS_MANAGER],
+        "assign_to_org": True,
     },
     {
         "email": "gestor.abrigo@horizonteseguro.app",
         "name": "Gestor de Abrigo",
         "roles": [Role.SHELTER_MANAGER],
+        "assign_to_org": True,
     },
     {
         "email": "multi@horizonteseguro.app",
         "name": "Multi-role Tester",
         "roles": [Role.CRISIS_MANAGER, Role.SHELTER_MANAGER],
+        "assign_to_org": True,
     },
 ]
 
@@ -156,10 +185,6 @@ CRISES_SPEC = [
 
 SHELTERS_SPEC = [
     {
-        "organization_id": None,
-        "responsible_user_id": None,
-        "created_by": None,
-        "verified_by": None,
         "name": "Abrigo Comunitário Benedito Bentes",
         "address": "Rua da Esperança, 120",
         "neighborhood": "Benedito Bentes",
@@ -175,10 +200,6 @@ SHELTERS_SPEC = [
         "verified": True,
     },
     {
-        "organization_id": None,
-        "responsible_user_id": None,
-        "created_by": None,
-        "verified_by": None,
         "name": "Escola Municipal Esperança",
         "address": "Avenida Principal, 450",
         "neighborhood": "Tabuleiro do Martins",
@@ -194,10 +215,6 @@ SHELTERS_SPEC = [
         "verified": True,
     },
     {
-        "organization_id": None,
-        "responsible_user_id": None,
-        "created_by": None,
-        "verified_by": None,
         "name": "Ginásio Poliesportivo Municipal",
         "address": "Rua do Esporte, 88",
         "neighborhood": "Centro",
@@ -213,10 +230,6 @@ SHELTERS_SPEC = [
         "verified": True,
     },
     {
-        "organization_id": None,
-        "responsible_user_id": None,
-        "created_by": None,
-        "verified_by": None,
         "name": "Centro de Apoio Humanitário Nordeste",
         "address": "Avenida Recife Solidário, 1000",
         "neighborhood": "Imbiribeira",
@@ -292,10 +305,394 @@ CATEGORIES_SPEC: list[tuple[str, ResourceUnit, LotCategory, str]] = [
     ),
 ]
 
+# -------------------------------------------------------------------------- #
+# Inventory items por abrigo                                                 #
+# Mistura status (Sufficient/Low/Critical) pro dashboard ficar variado.      #
+# -------------------------------------------------------------------------- #
+# (shelter_name, category_name, quantity_current, quantity_max)
+INVENTORY_ITEMS_SPEC: list[tuple[str, str, int, int | None]] = [
+    # Benedito Bentes — escassez geral
+    ("Abrigo Comunitário Benedito Bentes", "alimento_nao_perecivel", 300, 1000),
+    ("Abrigo Comunitário Benedito Bentes", "agua_potavel", 200, 500),
+    ("Abrigo Comunitário Benedito Bentes", "cobertor", 40, 80),
+    ("Abrigo Comunitário Benedito Bentes", "kit_higiene_pessoal", 15, 80),
+    ("Abrigo Comunitário Benedito Bentes", "kit_medico_basico", 20, 30),
+    # Escola Esperança — melhor situacao
+    ("Escola Municipal Esperança", "alimento_nao_perecivel", 800, 1500),
+    ("Escola Municipal Esperança", "agua_potavel", 350, 1000),
+    ("Escola Municipal Esperança", "cobertor", 60, 100),
+    ("Escola Municipal Esperança", "colchao", 40, 80),
+    ("Escola Municipal Esperança", "kit_medico_basico", 5, 30),
+    # Ginásio Salvador — agua critica
+    ("Ginásio Poliesportivo Municipal", "alimento_nao_perecivel", 600, 2000),
+    ("Ginásio Poliesportivo Municipal", "agua_potavel", 100, 1500),
+    ("Ginásio Poliesportivo Municipal", "colchao", 80, 150),
+    ("Ginásio Poliesportivo Municipal", "fralda_descartavel", 30, 100),
+    # Centro Humanitário Recife — equilibrado
+    ("Centro de Apoio Humanitário Nordeste", "alimento_nao_perecivel", 400, 1000),
+    ("Centro de Apoio Humanitário Nordeste", "agua_potavel", 350, 600),
+    ("Centro de Apoio Humanitário Nordeste", "kit_medico_basico", 25, 40),
+    ("Centro de Apoio Humanitário Nordeste", "kit_higiene_pessoal", 50, 100),
+]
+
+# -------------------------------------------------------------------------- #
+# Inventory movements (historico)                                            #
+# -------------------------------------------------------------------------- #
+# (shelter_name, category_name, direction, quantity, reason, source,
+#  destination_shelter_name)
+INVENTORY_MOVEMENTS_SPEC: list[
+    tuple[
+        str,
+        str,
+        MovementDirection,
+        int,
+        MovementReason,
+        str | None,
+        str | None,
+    ]
+] = [
+    # Benedito Bentes
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "alimento_nao_perecivel",
+        MovementDirection.IN,
+        100,
+        MovementReason.DONATION,
+        "Igreja Local",
+        None,
+    ),
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "agua_potavel",
+        MovementDirection.IN,
+        200,
+        MovementReason.DONATION,
+        "Cruz Vermelha",
+        None,
+    ),
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "alimento_nao_perecivel",
+        MovementDirection.OUT,
+        30,
+        MovementReason.DISTRIBUTION,
+        None,
+        None,
+    ),
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "kit_higiene_pessoal",
+        MovementDirection.OUT,
+        20,
+        MovementReason.DISTRIBUTION,
+        None,
+        None,
+    ),
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "cobertor",
+        MovementDirection.OUT,
+        10,
+        MovementReason.TRANSFER_OUT,
+        None,
+        "Escola Municipal Esperança",
+    ),
+    # Escola Esperança
+    (
+        "Escola Municipal Esperança",
+        "alimento_nao_perecivel",
+        MovementDirection.IN,
+        200,
+        MovementReason.DONATION,
+        "Mercado Solidário",
+        None,
+    ),
+    (
+        "Escola Municipal Esperança",
+        "cobertor",
+        MovementDirection.IN,
+        10,
+        MovementReason.TRANSFER_IN,
+        "Abrigo Comunitário Benedito Bentes",
+        None,
+    ),
+    (
+        "Escola Municipal Esperança",
+        "agua_potavel",
+        MovementDirection.IN,
+        300,
+        MovementReason.DONATION,
+        "ONG SOS Vidas",
+        None,
+    ),
+    (
+        "Escola Municipal Esperança",
+        "alimento_nao_perecivel",
+        MovementDirection.OUT,
+        50,
+        MovementReason.DISTRIBUTION,
+        None,
+        None,
+    ),
+    # Ginásio Salvador
+    (
+        "Ginásio Poliesportivo Municipal",
+        "alimento_nao_perecivel",
+        MovementDirection.IN,
+        500,
+        MovementReason.DONATION,
+        "Doação Empresarial",
+        None,
+    ),
+    (
+        "Ginásio Poliesportivo Municipal",
+        "agua_potavel",
+        MovementDirection.IN,
+        200,
+        MovementReason.DONATION,
+        "Defesa Civil",
+        None,
+    ),
+    (
+        "Ginásio Poliesportivo Municipal",
+        "fralda_descartavel",
+        MovementDirection.OUT,
+        50,
+        MovementReason.DISTRIBUTION,
+        None,
+        None,
+    ),
+    (
+        "Ginásio Poliesportivo Municipal",
+        "colchao",
+        MovementDirection.OUT,
+        5,
+        MovementReason.TRANSFER_OUT,
+        None,
+        "Centro de Apoio Humanitário Nordeste",
+    ),
+    # Centro Humanitário Recife
+    (
+        "Centro de Apoio Humanitário Nordeste",
+        "alimento_nao_perecivel",
+        MovementDirection.IN,
+        200,
+        MovementReason.DONATION,
+        "Banco de Alimentos",
+        None,
+    ),
+    (
+        "Centro de Apoio Humanitário Nordeste",
+        "agua_potavel",
+        MovementDirection.IN,
+        100,
+        MovementReason.DONATION,
+        "Cruz Vermelha",
+        None,
+    ),
+    (
+        "Centro de Apoio Humanitário Nordeste",
+        "colchao",
+        MovementDirection.IN,
+        5,
+        MovementReason.TRANSFER_IN,
+        "Ginásio Poliesportivo Municipal",
+        None,
+    ),
+    (
+        "Centro de Apoio Humanitário Nordeste",
+        "kit_higiene_pessoal",
+        MovementDirection.OUT,
+        30,
+        MovementReason.DISTRIBUTION,
+        None,
+        None,
+    ),
+]
+
+# -------------------------------------------------------------------------- #
+# Beneficiaries (com stays abertos)                                          #
+# -------------------------------------------------------------------------- #
+# (shelter_name, name, age, vulnerability, cpf)
+BENEFICIARIES_SPEC: list[tuple[str, str, int, VulnerabilityType, str]] = [
+    # Benedito Bentes
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "João da Silva",
+        8,
+        VulnerabilityType.CHILD,
+        "111.222.333-01",
+    ),
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "Maria Souza",
+        67,
+        VulnerabilityType.ELDERLY,
+        "111.222.333-02",
+    ),
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "Ana Pereira",
+        28,
+        VulnerabilityType.PREGNANT,
+        "111.222.333-03",
+    ),
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "Carlos Oliveira",
+        45,
+        VulnerabilityType.DISABLED,
+        "111.222.333-04",
+    ),
+    (
+        "Abrigo Comunitário Benedito Bentes",
+        "Beatriz Santos",
+        12,
+        VulnerabilityType.CHILD,
+        "111.222.333-05",
+    ),
+    # Escola Esperança
+    (
+        "Escola Municipal Esperança",
+        "Pedro Lima",
+        70,
+        VulnerabilityType.ELDERLY,
+        "222.333.444-01",
+    ),
+    (
+        "Escola Municipal Esperança",
+        "Lúcia Mendes",
+        32,
+        VulnerabilityType.NONE,
+        "222.333.444-02",
+    ),
+    (
+        "Escola Municipal Esperança",
+        "Tiago Almeida",
+        6,
+        VulnerabilityType.CHILD,
+        "222.333.444-03",
+    ),
+    (
+        "Escola Municipal Esperança",
+        "Rosa Carvalho",
+        58,
+        VulnerabilityType.CHRONIC_ILLNESS,
+        "222.333.444-04",
+    ),
+    (
+        "Escola Municipal Esperança",
+        "Fernando Costa",
+        40,
+        VulnerabilityType.DISABLED,
+        "222.333.444-05",
+    ),
+    # Ginásio Salvador
+    (
+        "Ginásio Poliesportivo Municipal",
+        "Mariana Pinto",
+        25,
+        VulnerabilityType.PREGNANT,
+        "333.444.555-01",
+    ),
+    (
+        "Ginásio Poliesportivo Municipal",
+        "José Ferreira",
+        75,
+        VulnerabilityType.ELDERLY,
+        "333.444.555-02",
+    ),
+    (
+        "Ginásio Poliesportivo Municipal",
+        "Camila Rodrigues",
+        9,
+        VulnerabilityType.CHILD,
+        "333.444.555-03",
+    ),
+    (
+        "Ginásio Poliesportivo Municipal",
+        "Roberto Silva",
+        50,
+        VulnerabilityType.NONE,
+        "333.444.555-04",
+    ),
+    (
+        "Ginásio Poliesportivo Municipal",
+        "Patrícia Lima",
+        35,
+        VulnerabilityType.CHRONIC_ILLNESS,
+        "333.444.555-05",
+    ),
+    # Centro Humanitário Recife
+    (
+        "Centro de Apoio Humanitário Nordeste",
+        "Antônio Pereira",
+        60,
+        VulnerabilityType.ELDERLY,
+        "444.555.666-01",
+    ),
+    (
+        "Centro de Apoio Humanitário Nordeste",
+        "Juliana Costa",
+        30,
+        VulnerabilityType.NONE,
+        "444.555.666-02",
+    ),
+    (
+        "Centro de Apoio Humanitário Nordeste",
+        "Felipe Santos",
+        11,
+        VulnerabilityType.CHILD,
+        "444.555.666-03",
+    ),
+    (
+        "Centro de Apoio Humanitário Nordeste",
+        "Sandra Lima",
+        65,
+        VulnerabilityType.ELDERLY,
+        "444.555.666-04",
+    ),
+    (
+        "Centro de Apoio Humanitário Nordeste",
+        "Diego Mendes",
+        22,
+        VulnerabilityType.DISABLED,
+        "444.555.666-05",
+    ),
+]
+
+# Quais users (por email) viram managers de cada abrigo. 2 managers por abrigo
+# pra deixar active_managers != 0 na resposta.
+SHELTER_MANAGER_ASSIGNMENTS: dict[str, list[str]] = {
+    "Abrigo Comunitário Benedito Bentes": [
+        "gestor.abrigo@horizonteseguro.app",
+        "multi@horizonteseguro.app",
+    ],
+    "Escola Municipal Esperança": [
+        "gestor.abrigo@horizonteseguro.app",
+        "multi@horizonteseguro.app",
+    ],
+    "Ginásio Poliesportivo Municipal": [
+        "gestor.abrigo@horizonteseguro.app",
+        "multi@horizonteseguro.app",
+    ],
+    "Centro de Apoio Humanitário Nordeste": [
+        "gestor.abrigo@horizonteseguro.app",
+        "multi@horizonteseguro.app",
+    ],
+}
+
+
 SEEDED_USER_EMAILS = [u["email"] for u in USERS_SPEC]
 SEEDED_CRISIS_NAMES = [c["name"] for c in CRISES_SPEC]
 SEEDED_SHELTER_NAMES = [s["name"] for s in SHELTERS_SPEC]
 SEEDED_CATEGORY_NAMES = [name for name, _, _, _ in CATEGORIES_SPEC]
+SEEDED_BENEFICIARY_CPFS = [cpf for _, _, _, _, cpf in BENEFICIARIES_SPEC]
+
+
+# -------------------------------------------------------------------------- #
+# Reset                                                                      #
+# -------------------------------------------------------------------------- #
 
 
 def reset(session) -> None:
@@ -312,6 +709,53 @@ def reset(session) -> None:
         select(Shelter).where(Shelter.name.in_(SEEDED_SHELTER_NAMES))
     ).all()
     seeded_shelter_ids = [s.id for s in seeded_shelter_rows]
+    seeded_beneficiary_rows = session.scalars(
+        select(Beneficiary).where(Beneficiary.cpf.in_(SEEDED_BENEFICIARY_CPFS))
+    ).all()
+    seeded_beneficiary_ids = [b.id for b in seeded_beneficiary_rows]
+
+    # --- Order matters: filhos primeiro pra nao bater em FK constraints --- #
+
+    # inventory_movements depende de shelters, categories e users.
+    if seeded_shelter_ids:
+        session.execute(
+            delete(InventoryMovement).where(
+                InventoryMovement.shelter_id.in_(seeded_shelter_ids)
+            )
+        )
+        session.execute(
+            delete(InventoryMovement).where(
+                InventoryMovement.destination_shelter_id.in_(seeded_shelter_ids)
+            )
+        )
+        # inventory_items.
+        session.execute(
+            delete(InventoryItem).where(
+                InventoryItem.shelter_id.in_(seeded_shelter_ids)
+            )
+        )
+        # shelter_stays (por shelter — apaga até stays abertos de beneficiarios
+        # nao seedados que por acaso estavam num shelter seedado).
+        session.execute(
+            delete(ShelterStay).where(ShelterStay.shelter_id.in_(seeded_shelter_ids))
+        )
+        # users_shelters
+        session.execute(
+            delete(UsersShelters).where(
+                UsersShelters.shelter_id.in_(seeded_shelter_ids)
+            )
+        )
+
+    # beneficiaries — depois de shelter_stays.
+    if seeded_beneficiary_ids:
+        session.execute(
+            delete(ShelterStay).where(
+                ShelterStay.beneficiary_id.in_(seeded_beneficiary_ids)
+            )
+        )
+        session.execute(
+            delete(Beneficiary).where(Beneficiary.id.in_(seeded_beneficiary_ids))
+        )
 
     if seeded_crisis_ids:
         session.execute(
@@ -335,32 +779,81 @@ def reset(session) -> None:
         session.execute(
             delete(UsersCrises).where(UsersCrises.user_id.in_(seeded_user_ids))
         )
+        session.execute(
+            delete(UsersShelters).where(UsersShelters.user_id.in_(seeded_user_ids))
+        )
         session.execute(delete(UserRole).where(UserRole.user_id.in_(seeded_user_ids)))
         session.execute(delete(User).where(User.id.in_(seeded_user_ids)))
-    # Resource categories are shared / referenced by inventory_items and
-    # inventory_movements. Reset only the ones we seeded by name.
+
+    # Resource categories sao compartilhadas; apaga so as seedadas.
     session.execute(
         delete(ResourceCategory).where(ResourceCategory.name.in_(SEEDED_CATEGORY_NAMES))
     )
+
+    # Organization demo — nao tem model, apaga via SQL.
+    session.execute(
+        text("DELETE FROM organizations WHERE name = :name"),
+        {"name": ORGANIZATION_NAME},
+    )
+
     session.commit()
-    print("[seed] reset: deleted seeded users, crises, shelters, grants, categories.")
+    print(
+        "[seed] reset: deleted seeded users, crises, shelters, inventory, "
+        "beneficiaries, organization, categories."
+    )
 
 
-def seed_users(session) -> dict[str, tuple[User, list[Role]]]:
+# -------------------------------------------------------------------------- #
+# Helpers de seed                                                            #
+# -------------------------------------------------------------------------- #
+
+
+def seed_organization(session) -> UUID:
+    """Get-or-create the demo organization. Returns its id."""
+    row = session.execute(
+        text("SELECT id FROM organizations WHERE name = :name"),
+        {"name": ORGANIZATION_NAME},
+    ).first()
+    if row is not None:
+        print(f"[seed] organization {ORGANIZATION_NAME!r} already exists.")
+        return row[0]
+
+    org_id = uuid4()
+    session.execute(
+        text(
+            "INSERT INTO organizations (id, name, type, contact_email) "
+            "VALUES (:id, :name, CAST(:type AS organization_type), :email)"
+        ),
+        {
+            "id": org_id,
+            "name": ORGANIZATION_NAME,
+            "type": ORGANIZATION_TYPE.value,
+            "email": "contato@horizonteseguro.app",
+        },
+    )
+    print(f"[seed] created organization {ORGANIZATION_NAME!r}.")
+    return org_id
+
+
+def seed_users(session, *, organization_id: UUID) -> dict[str, tuple[User, list[Role]]]:
     """Get-or-create seed users keyed by email. Returns {email: (user, roles)}."""
     out: dict[str, tuple[User, list[Role]]] = {}
     for spec in USERS_SPEC:
+        desired_org_id = organization_id if spec["assign_to_org"] else None
         existing = session.scalar(select(User).where(User.email == spec["email"]))
         if existing is not None:
             print(f"[seed] user {spec['email']} already exists.")
-            # Ensure roles match the spec (idempotent: grant_role no-ops on dup)
+            # Reconcile org_id pra o caso de a coluna ter vindo NULL de seeds
+            # anteriores.
+            if existing.organization_id != desired_org_id:
+                existing.organization_id = desired_org_id
             for role in spec["roles"]:
                 grant_role(session, user_id=existing.id, role=role)
             out[spec["email"]] = (existing, list(spec["roles"]))
             continue
 
         user = User(
-            organization_id=None,
+            organization_id=desired_org_id,
             name=spec["name"],
             email=spec["email"],
             phone=None,
@@ -402,21 +895,29 @@ def seed_crises(session, *, author_id) -> list[Crisis]:
 def seed_shelters(
     session,
     *,
+    organization_id: UUID,
     responsible_user_id,
     created_by,
     verified_by,
 ) -> list[Shelter]:
-    """Insert sample shelters. Returns existing + newly inserted shelters."""
+    """Insert sample shelters. Returns existing + newly inserted shelters.
+
+    Reconcilia o `organization_id` em shelters pré-existentes — necessário
+    quando o seed evoluiu (org_id era NULL em seeds antigos).
+    """
     rows: list[Shelter] = []
     inserted = 0
     for spec in SHELTERS_SPEC:
         existing = session.scalar(select(Shelter).where(Shelter.name == spec["name"]))
         if existing is not None:
+            if existing.organization_id != organization_id:
+                existing.organization_id = organization_id
             rows.append(existing)
             continue
 
         data = {
             **spec,
+            "organization_id": organization_id,
             "responsible_user_id": responsible_user_id,
             "created_by": created_by,
             "verified_by": verified_by if spec["verified"] else None,
@@ -532,6 +1033,240 @@ def link_crises_shelters(
         print("[seed] all crisis/shelter links already exist.")
 
 
+def assign_managers_to_shelters(
+    session,
+    *,
+    shelters: list[Shelter],
+    users_by_email: dict[str, tuple[User, list[Role]]],
+    granted_by: UUID,
+) -> None:
+    """Wire users_shelters pra cada (shelter, manager) em SHELTER_MANAGER_ASSIGNMENTS.
+
+    Cada linha em users_shelters conta como 1 `active_managers` no dashboard.
+    """
+    shelters_by_name = {s.name: s for s in shelters}
+    inserted = 0
+    for shelter_name, manager_emails in SHELTER_MANAGER_ASSIGNMENTS.items():
+        shelter = shelters_by_name.get(shelter_name)
+        if shelter is None:
+            continue
+        for email in manager_emails:
+            user_tuple = users_by_email.get(email)
+            if user_tuple is None:
+                print(
+                    f"[seed] WARN assigning manager {email!r} to {shelter_name!r}: "
+                    "user nao encontrado, pulando."
+                )
+                continue
+            user = user_tuple[0]
+            existing = session.scalar(
+                select(UsersShelters).where(
+                    UsersShelters.user_id == user.id,
+                    UsersShelters.shelter_id == shelter.id,
+                )
+            )
+            if existing is not None:
+                continue
+            session.add(
+                UsersShelters(
+                    user_id=user.id,
+                    shelter_id=shelter.id,
+                    granted_by=granted_by,
+                )
+            )
+            inserted += 1
+    if inserted:
+        print(f"[seed] {inserted} users_shelters rows created.")
+    else:
+        print("[seed] all manager assignments already exist.")
+
+
+def seed_inventory_items(
+    session,
+    *,
+    shelters: list[Shelter],
+    categories: list[ResourceCategory],
+) -> None:
+    """Popula `inventory_items` pra cada (shelter, category) listado em
+    INVENTORY_ITEMS_SPEC. Idempotente via unique (shelter_id, category_id).
+    """
+    shelters_by_name = {s.name: s for s in shelters}
+    categories_by_name = {c.name: c for c in categories}
+    inserted = 0
+
+    for shelter_name, category_name, qty_current, qty_max in INVENTORY_ITEMS_SPEC:
+        shelter = shelters_by_name.get(shelter_name)
+        category = categories_by_name.get(category_name)
+        if shelter is None or category is None:
+            print(
+                f"[seed] WARN inventory_item skip {shelter_name!r}/{category_name!r}: "
+                "referencia ausente."
+            )
+            continue
+        existing = session.scalar(
+            select(InventoryItem).where(
+                InventoryItem.shelter_id == shelter.id,
+                InventoryItem.category_id == category.id,
+            )
+        )
+        if existing is not None:
+            # Reconcilia quantidades pra o caso do seed ter evoluido.
+            existing.quantity_current = qty_current
+            existing.quantity_max = qty_max
+            continue
+        session.add(
+            InventoryItem(
+                shelter_id=shelter.id,
+                category_id=category.id,
+                quantity_current=qty_current,
+                quantity_max=qty_max,
+            )
+        )
+        inserted += 1
+    if inserted:
+        print(f"[seed] {inserted} inventory_items created.")
+    else:
+        print("[seed] all inventory_items already exist (reconciled quantities).")
+
+
+def seed_inventory_movements(
+    session,
+    *,
+    shelters: list[Shelter],
+    categories: list[ResourceCategory],
+    actor_id: UUID,
+) -> None:
+    """Insere `inventory_movements` historicos (sem usar record_movement, pra
+    nao mexer no inventory_items.quantity_current — esse ja foi seedado direto).
+
+    Como movements nao tem natural unique key, a estrategia é: se ja existir
+    qualquer movement com (shelter_id, category_id, direction, quantity, reason),
+    assume que ta seedado e pula.
+    """
+    shelters_by_name = {s.name: s for s in shelters}
+    categories_by_name = {c.name: c for c in categories}
+    inserted = 0
+
+    for (
+        shelter_name,
+        category_name,
+        direction,
+        quantity,
+        reason,
+        source,
+        destination_name,
+    ) in INVENTORY_MOVEMENTS_SPEC:
+        shelter = shelters_by_name.get(shelter_name)
+        category = categories_by_name.get(category_name)
+        if shelter is None or category is None:
+            continue
+
+        destination_shelter_id = None
+        if destination_name is not None:
+            dest = shelters_by_name.get(destination_name)
+            if dest is None:
+                print(
+                    f"[seed] WARN movement skip dest {destination_name!r}: "
+                    "referencia ausente."
+                )
+                continue
+            destination_shelter_id = dest.id
+
+        existing = session.scalar(
+            select(InventoryMovement).where(
+                InventoryMovement.shelter_id == shelter.id,
+                InventoryMovement.category_id == category.id,
+                InventoryMovement.direction == direction,
+                InventoryMovement.quantity == quantity,
+                InventoryMovement.reason == reason,
+            )
+        )
+        if existing is not None:
+            continue
+
+        session.add(
+            InventoryMovement(
+                shelter_id=shelter.id,
+                category_id=category.id,
+                direction=direction,
+                quantity=quantity,
+                reason=reason,
+                source=source,
+                notes=None,
+                destination_shelter_id=destination_shelter_id,
+                created_by=actor_id,
+            )
+        )
+        inserted += 1
+    if inserted:
+        print(f"[seed] {inserted} inventory_movements created.")
+    else:
+        print("[seed] all inventory_movements already exist.")
+
+
+def seed_beneficiaries_and_stays(
+    session,
+    *,
+    shelters: list[Shelter],
+) -> None:
+    """Insere beneficiarios e abre um shelter_stay por beneficiario."""
+    shelters_by_name = {s.name: s for s in shelters}
+    inserted_b = 0
+    inserted_s = 0
+    check_in = datetime.now(timezone.utc)
+
+    for shelter_name, name, age, vulnerability, cpf in BENEFICIARIES_SPEC:
+        shelter = shelters_by_name.get(shelter_name)
+        if shelter is None:
+            print(f"[seed] WARN beneficiary skip — shelter {shelter_name!r} ausente.")
+            continue
+
+        beneficiary = session.scalar(select(Beneficiary).where(Beneficiary.cpf == cpf))
+        if beneficiary is None:
+            beneficiary = Beneficiary(
+                user_id=None,
+                cpf=cpf,
+                name=name,
+                age=age,
+                vulnerability=vulnerability,
+            )
+            session.add(beneficiary)
+            session.flush()
+            inserted_b += 1
+
+        # Open stay (checked_out_at IS NULL) — usado pelo dashboard pra contar
+        # "pessoas no abrigo agora".
+        existing_stay = session.scalar(
+            select(ShelterStay).where(
+                ShelterStay.beneficiary_id == beneficiary.id,
+                ShelterStay.shelter_id == shelter.id,
+                ShelterStay.checked_out_at.is_(None),
+            )
+        )
+        if existing_stay is None:
+            session.add(
+                ShelterStay(
+                    beneficiary_id=beneficiary.id,
+                    shelter_id=shelter.id,
+                    checked_in_at=check_in,
+                    checked_out_at=None,
+                )
+            )
+            inserted_s += 1
+
+    if inserted_b:
+        print(f"[seed] {inserted_b} beneficiaries created.")
+    if inserted_s:
+        print(f"[seed] {inserted_s} shelter_stays opened.")
+    if not (inserted_b or inserted_s):
+        print("[seed] all beneficiaries and stays already exist.")
+
+
+# -------------------------------------------------------------------------- #
+# Pretty print                                                               #
+# -------------------------------------------------------------------------- #
+
+
 def print_credentials(users: dict[str, tuple[User, list[Role]]]) -> None:
     print()
     print("=== Usuarios seeded ===")
@@ -549,11 +1284,17 @@ def print_credentials(users: dict[str, tuple[User, list[Role]]]) -> None:
         print(f"\n[{role_label}]")
         print(f"  email:   {user.email}")
         print(f"  user_id: {user.id}")
+        print(f"  org_id:  {user.organization_id}")
         print(f"  token:   {token}")
     print()
     print("Uso:")
     print("  - Cola o JWT em 'Authorize' no Swagger (/api/docs): Bearer <token>")
     print("  - Ou faz POST /auth/login com email+senha pra obter um token novo")
+
+
+# -------------------------------------------------------------------------- #
+# Runner                                                                     #
+# -------------------------------------------------------------------------- #
 
 
 def run(reset_first: bool) -> int:
@@ -562,7 +1303,10 @@ def run(reset_first: bool) -> int:
             if reset_first:
                 reset(session)
 
-            users = seed_users(session)
+            org_id = seed_organization(session)
+            session.commit()
+
+            users = seed_users(session, organization_id=org_id)
             session.commit()
 
             dev_user, _ = users["admin@horizonteseguro.app"]
@@ -574,6 +1318,7 @@ def run(reset_first: bool) -> int:
 
             shelters = seed_shelters(
                 session,
+                organization_id=org_id,
                 responsible_user_id=shelter_mgr.id,
                 created_by=dev_user.id,
                 verified_by=dev_user.id,
@@ -588,7 +1333,23 @@ def run(reset_first: bool) -> int:
             link_crises_shelters(session, crises=crises, shelters=shelters)
             session.commit()
 
-            seed_categories(session)
+            categories = seed_categories(session)
+            session.commit()
+
+            assign_managers_to_shelters(
+                session,
+                shelters=shelters,
+                users_by_email=users,
+                granted_by=dev_user.id,
+            )
+            seed_inventory_items(session, shelters=shelters, categories=categories)
+            seed_inventory_movements(
+                session,
+                shelters=shelters,
+                categories=categories,
+                actor_id=dev_user.id,
+            )
+            seed_beneficiaries_and_stays(session, shelters=shelters)
             session.commit()
 
             print_credentials(users)
@@ -603,7 +1364,10 @@ def main() -> int:
     parser.add_argument(
         "--reset",
         action="store_true",
-        help="Delete previously-seeded users, crises, shelters and grants before inserting.",
+        help=(
+            "Delete previously-seeded users, crises, shelters, inventory, "
+            "beneficiaries and organization before inserting."
+        ),
     )
     args = parser.parse_args()
     return run(reset_first=args.reset)
