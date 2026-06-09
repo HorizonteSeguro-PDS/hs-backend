@@ -1,9 +1,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from domain.schemas.enums import (
+    LotCategory,
     MovementDirection,
     MovementReason,
     ResourceUnit,
@@ -18,6 +19,7 @@ class ResourceCategoryCreateRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=120)
     unit: ResourceUnit
+    lot_category: LotCategory
     description: str | None = Field(default=None, max_length=500)
 
 
@@ -26,6 +28,7 @@ class ResourceCategoryUpdateRequest(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=120)
     unit: ResourceUnit | None = None
+    lot_category: LotCategory | None = None
     description: str | None = Field(default=None, max_length=500)
 
 
@@ -35,6 +38,7 @@ class ResourceCategoryRead(BaseModel):
     id: UUID
     name: str
     unit: ResourceUnit
+    lot_category: LotCategory
     description: str | None = None
 
 
@@ -50,6 +54,7 @@ class InventoryItemRead(BaseModel):
     shelter_id: UUID
     category_id: UUID
     quantity_current: int
+    quantity_max: int | None = None
     updated_at: datetime
 
 
@@ -62,7 +67,20 @@ class InventoryItemWithCategoryRead(BaseModel):
     shelter_id: UUID
     category: ResourceCategoryRead
     quantity_current: int
+    quantity_max: int | None = None
     updated_at: datetime
+
+
+class InventoryItemQuantityMaxUpdateRequest(BaseModel):
+    """Payload pra setar/limpar o teto de estoque (quantity_max)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    quantity_max: int | None = Field(
+        default=None,
+        gt=0,
+        description="Teto desejado pro item (>0). NULL limpa o teto.",
+    )
 
 
 # ---------- InventoryMovement ----------
@@ -72,6 +90,10 @@ class InventoryMovementCreateRequest(BaseModel):
     """Payload pra registrar entrada ou saída de recurso num abrigo.
 
     `created_by` vem do JWT, não do body.
+
+    `destination_shelter_id` deve ser preenchido APENAS em transferencias
+    pra outro abrigo (direction=OUT, reason=TRANSFER_OUT). O CHECK no banco
+    duplica essa amarra como ultima linha de defesa.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -82,6 +104,23 @@ class InventoryMovementCreateRequest(BaseModel):
     reason: MovementReason
     source: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=2000)
+    destination_shelter_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def _destination_only_on_transfer_out(self) -> "InventoryMovementCreateRequest":
+        is_transfer_out = (
+            self.direction == MovementDirection.OUT
+            and self.reason == MovementReason.TRANSFER_OUT
+        )
+        if is_transfer_out and self.destination_shelter_id is None:
+            raise ValueError(
+                "destination_shelter_id is required when reason=transfer_out"
+            )
+        if not is_transfer_out and self.destination_shelter_id is not None:
+            raise ValueError(
+                "destination_shelter_id is only allowed when reason=transfer_out"
+            )
+        return self
 
 
 class InventoryMovementRead(BaseModel):
@@ -95,6 +134,7 @@ class InventoryMovementRead(BaseModel):
     reason: MovementReason
     source: str | None = None
     notes: str | None = None
+    destination_shelter_id: UUID | None = None
     created_by: UUID
     created_at: datetime
 
@@ -112,6 +152,7 @@ class InventoryMovementWithCategoryRead(BaseModel):
     reason: MovementReason
     source: str | None = None
     notes: str | None = None
+    destination_shelter_id: UUID | None = None
     created_by: UUID
     created_at: datetime
 
