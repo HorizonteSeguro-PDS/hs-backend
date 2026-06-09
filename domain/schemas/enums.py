@@ -22,6 +22,37 @@ class ResourceUnit(str, Enum):
     REAL = "real"
 
 
+class LotCategory(str, Enum):
+    """Bucket grosseiro de tipo de recurso — categoria-pai das
+    ResourceCategory mais especificas (alimento_nao_perecivel pertence
+    a FOOD, cobertor pertence a BEDDING, etc).
+
+    Mirrors the `lot_category` Postgres enum defined in migration 0018.
+    """
+
+    FOOD = "food"
+    WATER = "water"
+    MEDICINE = "medicine"
+    HYGIENE = "hygiene"
+    BEDDING = "bedding"
+    ANIMAL = "animal"
+    MONEY = "money"
+    CLOTHING = "clothing"
+    OTHER = "other"
+
+
+class SupplyStatus(str, Enum):
+    """Label de saude do estoque, derivado de quantity_current/quantity_max.
+
+    Pure Pydantic enum — NAO existe coluna nem CHECK no banco. A regra mora
+    em services/operations.derive_supply_status.
+    """
+
+    SUFFICIENT = "Sufficient"
+    LOW = "Low"
+    CRITICAL = "Critical"
+
+
 class MovementDirection(str, Enum):
     """Whether an inventory movement is an entry or exit.
 

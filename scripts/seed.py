@@ -40,6 +40,7 @@ from domain.models.user import User  # noqa: E402
 from domain.models.user_role import UserRole  # noqa: E402
 from domain.models.users_crises import UsersCrises  # noqa: E402
 from domain.schemas.enums import (  # noqa: E402
+    LotCategory,
     ResourceUnit,
     ShelterStatus,
     ShelterType,
@@ -246,36 +247,55 @@ CRISIS_SHELTER_LINKS = {
     ],
 }
 
-CATEGORIES_SPEC: list[tuple[str, ResourceUnit, str]] = [
-    ("agua_potavel", ResourceUnit.L, "Água potável engarrafada"),
-    ("cobertor", ResourceUnit.UNIDADE, "Cobertor adulto"),
-    ("colchao", ResourceUnit.UNIDADE, "Colchão de campanha"),
+# (name, unit, lot_category, description)
+CATEGORIES_SPEC: list[tuple[str, ResourceUnit, LotCategory, str]] = [
+    ("agua_potavel", ResourceUnit.L, LotCategory.WATER, "Água potável engarrafada"),
+    ("cobertor", ResourceUnit.UNIDADE, LotCategory.BEDDING, "Cobertor adulto"),
+    ("colchao", ResourceUnit.UNIDADE, LotCategory.BEDDING, "Colchão de campanha"),
     (
         "kit_medico_basico",
         ResourceUnit.UNIDADE,
+        LotCategory.MEDICINE,
         "Curativo, antitérmico, soro fisiológico",
     ),
     (
         "kit_higiene_pessoal",
         ResourceUnit.UNIDADE,
+        LotCategory.HYGIENE,
         "Escova, pasta, sabonete, toalha",
     ),
-    ("fralda_descartavel", ResourceUnit.UNIDADE, "Bebê — pacote"),
-    ("fralda_geriatrica", ResourceUnit.UNIDADE, "Adulto — pacote"),
-    ("absorvente", ResourceUnit.UNIDADE, "Pacote padrão"),
+    (
+        "fralda_descartavel",
+        ResourceUnit.UNIDADE,
+        LotCategory.HYGIENE,
+        "Bebê — pacote",
+    ),
+    (
+        "fralda_geriatrica",
+        ResourceUnit.UNIDADE,
+        LotCategory.HYGIENE,
+        "Adulto — pacote",
+    ),
+    ("absorvente", ResourceUnit.UNIDADE, LotCategory.HYGIENE, "Pacote padrão"),
     (
         "alimento_nao_perecivel",
         ResourceUnit.KG,
+        LotCategory.FOOD,
         "Arroz, feijão, açúcar, óleo, etc.",
     ),
-    ("racao_animal", ResourceUnit.KG, "Ração para cães e gatos"),
-    ("doacao_dinheiro", ResourceUnit.REAL, "Doação em dinheiro pra logística"),
+    ("racao_animal", ResourceUnit.KG, LotCategory.ANIMAL, "Ração para cães e gatos"),
+    (
+        "doacao_dinheiro",
+        ResourceUnit.REAL,
+        LotCategory.MONEY,
+        "Doação em dinheiro pra logística",
+    ),
 ]
 
 SEEDED_USER_EMAILS = [u["email"] for u in USERS_SPEC]
 SEEDED_CRISIS_NAMES = [c["name"] for c in CRISES_SPEC]
 SEEDED_SHELTER_NAMES = [s["name"] for s in SHELTERS_SPEC]
-SEEDED_CATEGORY_NAMES = [name for name, _, _ in CATEGORIES_SPEC]
+SEEDED_CATEGORY_NAMES = [name for name, _, _, _ in CATEGORIES_SPEC]
 
 
 def reset(session) -> None:
@@ -420,14 +440,19 @@ def seed_categories(session) -> list[ResourceCategory]:
     """
     inserted = 0
     rows: list[ResourceCategory] = []
-    for name, unit, description in CATEGORIES_SPEC:
+    for name, unit, lot_category, description in CATEGORIES_SPEC:
         existing = session.scalar(
             select(ResourceCategory).where(ResourceCategory.name == name)
         )
         if existing is not None:
             rows.append(existing)
             continue
-        category = ResourceCategory(name=name, unit=unit, description=description)
+        category = ResourceCategory(
+            name=name,
+            unit=unit,
+            lot_category=lot_category,
+            description=description,
+        )
         session.add(category)
         session.flush()
         rows.append(category)
