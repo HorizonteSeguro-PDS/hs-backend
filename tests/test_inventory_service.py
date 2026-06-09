@@ -13,6 +13,7 @@ from domain.models.inventory_item import InventoryItem
 from domain.models.inventory_movement import InventoryMovement
 from domain.models.resource_category import ResourceCategory
 from domain.schemas.enums import (
+    LotCategory,
     MovementDirection,
     MovementReason,
     ResourceUnit,
@@ -36,7 +37,11 @@ def _setup_session() -> Session:
 
 def _seed_category(session: Session, name: str = "cobertor") -> ResourceCategory:
     cat = ResourceCategory(
-        id=uuid.uuid4(), name=name, unit=ResourceUnit.UNIDADE, description=None
+        id=uuid.uuid4(),
+        name=name,
+        unit=ResourceUnit.UNIDADE,
+        lot_category=LotCategory.BEDDING,
+        description=None,
     )
     session.add(cat)
     session.commit()
