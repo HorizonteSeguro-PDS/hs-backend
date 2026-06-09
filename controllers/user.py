@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from dependencies.auth import CurrentUser, get_current_user
 from dependencies.session import get_session
 from domain.audit.enums import AuditAction, AuditEntityType
+from domain.models.organization import Organization
 from domain.models.user import User
 from domain.user.schemas import UserRead, UserRegister
 from services.audit_service import audit_event
@@ -62,6 +63,13 @@ def register_user(
             ),
         )
 
+    if payload.organization_id is not None:
+        if session.get(Organization, payload.organization_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="organization not found",
+            )
+
     user = User(
         organization_id=payload.organization_id,
         name=payload.name,
@@ -75,10 +83,12 @@ def register_user(
         session.flush()
     except IntegrityError as exc:
         session.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="email already registered",
-        ) from exc
+        if "uq_users_email" in str(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="email already registered",
+            ) from exc
+        raise
 
     for role in payload.roles:
         grant_role(session, user_id=user.id, role=role)
