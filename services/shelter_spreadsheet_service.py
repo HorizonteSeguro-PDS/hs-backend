@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from io import BytesIO
 from uuid import UUID
 from zipfile import BadZipFile
@@ -361,6 +362,9 @@ class ShelterSpreadsheetService:
     def _format_datetime(self, value: object) -> str | None:
         if value is None:
             return None
+        if isinstance(value, datetime):
+            dt = value.astimezone(timezone.utc) if value.tzinfo is not None else value
+            return dt.replace(tzinfo=None).strftime("%Y-%m-%d %H:%M:%S")
         return str(value)
 
     def _to_bytes(self, workbook: Workbook) -> bytes:
