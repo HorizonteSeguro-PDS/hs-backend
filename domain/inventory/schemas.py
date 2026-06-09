@@ -125,3 +125,11 @@ class InventoryMovementRecordedResponse(BaseModel):
     inventory_after: int = Field(
         description="Saldo de quantity_current DEPOIS desse movimento."
     )
+
+
+class ShelterSpreadsheetImportResponse(BaseModel):
+    shelter_id: UUID
+    resources_imported: int
+    people_imported: int = 0
+    people_skipped: bool = True
+    errors: list[str] = Field(default_factory=list)
