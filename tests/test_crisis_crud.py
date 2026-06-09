@@ -203,8 +203,6 @@ class TestListCrises:
             "severity",
             "state",
             "city",
-            "latitude",
-            "longitude",
             "start_date",
             "shelters_count",
             "active",

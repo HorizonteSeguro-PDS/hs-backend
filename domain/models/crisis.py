@@ -6,7 +6,6 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
     Enum as PgEnum,
-    Float,
     Index,
     SmallInteger,
     Text,
@@ -66,8 +65,6 @@ class Crisis(Base):
     )
     state: Mapped[BrazilianState] = mapped_column(brazilian_state_pg, nullable=False)
     city: Mapped[str] = mapped_column(VARCHAR, nullable=False)
-    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
-    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     severity_initial: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     severity_calculated: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
@@ -106,14 +103,6 @@ class Crisis(Base):
         CheckConstraint(
             "(severity_calculated IS NULL OR (severity_calculated >= 0 AND severity_calculated <= 3))",
             name="ck_crises_severity_calculated",
-        ),
-        CheckConstraint(
-            "(latitude IS NULL OR (latitude >= -90 AND latitude <= 90))",
-            name="ck_crises_latitude_range",
-        ),
-        CheckConstraint(
-            "(longitude IS NULL OR (longitude >= -180 AND longitude <= 180))",
-            name="ck_crises_longitude_range",
         ),
         Index("ix_crises_state_city", "state", "city"),
         Index("ix_crises_status", "status"),

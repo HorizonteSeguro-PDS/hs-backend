@@ -171,8 +171,6 @@ def test_crisis_list_item_response_has_only_the_fields_the_front_wants():
         "severity",
         "state",
         "city",
-        "latitude",
-        "longitude",
         "start_date",
         "shelters_count",
         "active",

@@ -63,8 +63,6 @@ class CrisisBase(BaseModel):
         min_length=2, max_length=2, description="UF brasileira (2 letras)"
     )
     city: str = Field(min_length=1, max_length=120)
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
     start_date: date | None = None
     status: CrisisStatus = CrisisStatus.ACTIVE
     severity_initial: int | None = Field(default=None, ge=0, le=3)
@@ -141,8 +139,6 @@ class CrisisUpdate(BaseModel):
     description: str | None = None
     state: str | None = Field(default=None, min_length=2, max_length=2)
     city: str | None = Field(default=None, min_length=1, max_length=120)
-    latitude: float | None = Field(default=None, ge=-90, le=90)
-    longitude: float | None = Field(default=None, ge=-180, le=180)
     severity_initial: int | None = Field(default=None, ge=0, le=3)
     severity_calculated: int | None = Field(default=None, ge=0, le=3)
 
@@ -168,8 +164,6 @@ class CrisisRead(BaseModel):
     status: CrisisStatus
     state: str
     city: str
-    latitude: float | None = None
-    longitude: float | None = None
     start_date: date | None = None
     severity_initial: int | None = None
     severity_calculated: int | None = None
@@ -196,8 +190,6 @@ class CrisisListItemResponse(BaseModel):
     severity: SeverityLabel
     state: str
     city: str
-    latitude: float | None = None
-    longitude: float | None = None
     start_date: date | None = None
     shelters_count: int = Field(ge=0)
     active: bool
