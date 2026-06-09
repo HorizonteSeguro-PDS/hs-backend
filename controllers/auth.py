@@ -37,6 +37,11 @@ def login(payload: LoginRequest, session: _SessionDep) -> LoginResponse:
             detail="invalid credentials",
         )
     user, roles = result
+    if not user.verified:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid credentials",
+        )
 
     token, expires_in = create_access_token(
         user_id=user.id,

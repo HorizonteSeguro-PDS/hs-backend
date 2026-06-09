@@ -11,7 +11,9 @@ from config import settings
 from controllers.auth import router as auth_router
 from controllers.crisis import router as crisis_router
 from controllers.inventory import router as inventory_router
+from controllers.organization import router as organization_router
 from controllers.operations import router as operations_router
+from controllers.registration_request import router as registration_request_router
 from controllers.resource_category import router as resource_category_router
 from controllers.shelter import router as shelter_router
 from controllers.shelter_spreadsheet import router as shelter_spreadsheet_router
@@ -61,7 +63,9 @@ logger.info("CORS allowed origins: %s", _cors_origins)
 app.include_router(auth_router)
 app.include_router(crisis_router)
 app.include_router(inventory_router)
+app.include_router(organization_router)
 app.include_router(operations_router)
+app.include_router(registration_request_router)
 app.include_router(resource_category_router)
 app.include_router(shelter_router)
 app.include_router(shelter_spreadsheet_router)

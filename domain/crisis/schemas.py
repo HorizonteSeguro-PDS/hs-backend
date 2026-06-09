@@ -152,7 +152,7 @@ class CrisisClose(BaseModel):
 
 
 class CrisisRead(BaseModel):
-    """Internal/admin shape — write endpoints (POST/PATCH/close/reopen) ainda
+    """Internal write shape — write endpoints (POST/PATCH/close/reopen) ainda
     devolvem isso, pra preservar visibilidade dos campos brutos (severity_initial
     em int, status enum completo, etc.). O front consumidor da listagem usa as
     *Response classes abaixo.
