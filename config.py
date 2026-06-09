@@ -48,5 +48,17 @@ class _Settings:
         """
         return os.getenv("CORS_ALLOW_ORIGIN_REGEX") or None
 
+    @property
+    def resend_api_key(self) -> str | None:
+        return os.getenv("RESEND_API_KEY") or None
+
+    @property
+    def email_from(self) -> str:
+        return os.getenv("EMAIL_FROM", "Horizonte Seguro <onboarding@resend.dev>")
+
+    @property
+    def app_frontend_url(self) -> str | None:
+        return os.getenv("APP_FRONTEND_URL") or None
+
 
 settings = _Settings()
