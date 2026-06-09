@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from unittest.mock import MagicMock
 
@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 import controllers.shelter_spreadsheet as spreadsheet_controller
+import scripts.seed as seed_script
 from dependencies.session import get_session
 from domain.models.beneficiary import Beneficiary
 from domain.models.inventory_item import InventoryItem
@@ -53,12 +54,16 @@ def _setup_session() -> Session:
     return Session(engine)
 
 
-def _seed_shelter(session: Session, shelter_id: uuid.UUID | None = None) -> Shelter:
+def _seed_shelter(
+    session: Session,
+    shelter_id: uuid.UUID | None = None,
+    name: str = "Abrigo Central",
+) -> Shelter:
     shelter = Shelter(
         id=shelter_id or uuid.uuid4(),
         responsible_user_id=uuid.uuid4(),
         created_by=uuid.uuid4(),
-        name="Abrigo Central",
+        name=name,
         address="Rua Principal, 100",
         city="Sao Paulo",
         state=BrazilianState.SP,
@@ -187,7 +192,90 @@ def _session_override(mock: MagicMock | None = None):
     return override
 
 
+class TestSeedSpreadsheetData:
+    def test_demo_shelter_id_belongs_to_demo_shelter_spec(self):
+        demo_specs = [
+            spec
+            for spec in seed_script.SHELTERS_SPEC
+            if spec["name"] == seed_script.DEMO_FULL_SHELTER_NAME
+        ]
+        misplaced_specs = [
+            spec
+            for spec in seed_script.SHELTERS_SPEC
+            if spec["name"] != seed_script.DEMO_FULL_SHELTER_NAME
+            and spec.get("id") == seed_script.DEMO_FULL_SHELTER_ID
+        ]
+
+        assert len(demo_specs) == 1
+        assert demo_specs[0]["id"] == seed_script.DEMO_FULL_SHELTER_ID
+        assert misplaced_specs == []
+
+    def test_seed_demo_full_shelter_open_stay_is_scoped_to_shelter(self):
+        with _setup_session() as session:
+            demo_shelter = _seed_shelter(
+                session,
+                shelter_id=seed_script.DEMO_FULL_SHELTER_ID,
+                name=seed_script.DEMO_FULL_SHELTER_NAME,
+            )
+            other_shelter = _seed_shelter(session, name="Outro Abrigo")
+            seeded_person = seed_script.BENEFICIARIES_SPEC[0]
+            beneficiary = _seed_person(
+                session,
+                shelter_id=other_shelter.id,
+                name=seeded_person["name"],
+                cpf=seeded_person["cpf"],
+            )
+            categories = [
+                _seed_category(session, name, unit)
+                for name, unit, _description in seed_script.CATEGORIES_SPEC
+            ]
+
+            seed_script.seed_demo_full_shelter(
+                session,
+                shelters=[demo_shelter, other_shelter],
+                categories=categories,
+                actor_id=uuid.uuid4(),
+            )
+            session.commit()
+
+            demo_open_stays = session.query(ShelterStay).filter_by(
+                beneficiary_id=beneficiary.id,
+                shelter_id=demo_shelter.id,
+                checked_out_at=None,
+            )
+            other_open_stays = session.query(ShelterStay).filter_by(
+                beneficiary_id=beneficiary.id,
+                shelter_id=other_shelter.id,
+                checked_out_at=None,
+            )
+            assert demo_open_stays.count() == 1
+            assert other_open_stays.count() == 1
+
+
 class TestShelterSpreadsheetService:
+    def test_format_datetime_serializes_naive_and_timezone_aware_values(self):
+        service = ShelterSpreadsheetService(MagicMock())
+
+        assert (
+            service._format_datetime(datetime(2026, 1, 2, 3, 4, 5))
+            == "2026-01-02 03:04:05"
+        )
+        assert (
+            service._format_datetime(
+                datetime(
+                    2026,
+                    1,
+                    2,
+                    0,
+                    4,
+                    5,
+                    tzinfo=timezone(timedelta(hours=-3)),
+                )
+            )
+            == "2026-01-02 03:04:05"
+        )
+        assert service._format_datetime("manual") == "manual"
+
     def test_template_has_expected_sheets_and_headers(self):
         with _setup_session() as session:
             _seed_shelter(session)
