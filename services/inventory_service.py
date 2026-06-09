@@ -113,6 +113,7 @@ class InventoryService:
             reason=payload.reason,
             source=payload.source,
             notes=payload.notes,
+            destination_shelter_id=payload.destination_shelter_id,
             created_by=actor_id,
         )
         self.session.add(movement)

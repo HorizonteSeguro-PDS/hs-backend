@@ -20,6 +20,7 @@ from domain.models.shelter import Shelter
 from domain.models.shelter_stay import ShelterStay
 from domain.schemas.enums import (
     BrazilianState,
+    LotCategory,
     MovementDirection,
     MovementReason,
     ResourceUnit,
@@ -87,6 +88,7 @@ def _seed_category(
         id=uuid.uuid4(),
         name=name,
         unit=unit,
+        lot_category=LotCategory.OTHER,
         description=None,
     )
     session.add(category)
@@ -227,7 +229,7 @@ class TestSeedSpreadsheetData:
             )
             categories = [
                 _seed_category(session, name, unit)
-                for name, unit, _description in seed_script.CATEGORIES_SPEC
+                for name, unit, _lot, _description in seed_script.CATEGORIES_SPEC
             ]
 
             seed_script.seed_demo_full_shelter(
