@@ -20,7 +20,7 @@ from domain.registration.schemas import (
     RegistrationRequestRead,
 )
 from domain.schemas.enums import OrganizationType
-from services.auth_service import grant_role, hash_password
+from services.auth_service import can_create_roles, grant_role, hash_password
 from services.email_service import send_registration_approved_email
 
 router = APIRouter(prefix="/registration-requests", tags=["registration-requests"])
@@ -110,6 +110,17 @@ def _request_roles(registration_request: RegistrationRequest) -> list[Role]:
     return roles
 
 
+def _raise_for_unauthorized_roles(actor: CurrentUser, roles: list[Role]) -> None:
+    if can_create_roles(actor.roles, roles):
+        return
+    actor_label = ",".join(sorted(role.value for role in actor.roles)) or "(none)"
+    target_label = ",".join(sorted(role.value for role in roles))
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"roles [{actor_label}] cannot create one or more of [{target_label}]",
+    )
+
+
 def _finalize_request(
     session: Session,
     registration_request: RegistrationRequest,
@@ -159,7 +170,14 @@ def create_existing_organization_request(
         organization_id=organization.id,
     )
     session.add(registration_request)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="registration request could not be created",
+        ) from exc
     session.refresh(registration_request)
     return RegistrationRequestRead.model_validate(registration_request)
 
@@ -196,7 +214,14 @@ def create_new_organization_request(
         ),
     )
     session.add(registration_request)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="registration request could not be created",
+        ) from exc
     session.refresh(registration_request)
     return RegistrationRequestRead.model_validate(registration_request)
 
@@ -244,6 +269,7 @@ def approve_registration_request(
         )
 
     roles = _request_roles(registration_request)
+    _raise_for_unauthorized_roles(actor, roles)
     organization_id = registration_request.organization_id
 
     if registration_request.request_type == TYPE_EXISTING_ORGANIZATION:
