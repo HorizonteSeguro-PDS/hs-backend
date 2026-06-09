@@ -1,6 +1,7 @@
 import uuid
+from datetime import date
 
-from sqlalchemy import VARCHAR, Enum as PgEnum, Index, Integer, Text, func
+from sqlalchemy import VARCHAR, Date, Enum as PgEnum, Index, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -28,6 +29,7 @@ class Beneficiary(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
+        default=uuid.uuid4,
         server_default=func.gen_random_uuid(),
     )
     # FK constraints live in the migrations.
@@ -35,6 +37,8 @@ class Beneficiary(Base):
     cpf: Mapped[str | None] = mapped_column(VARCHAR(14), nullable=True)
     name: Mapped[str] = mapped_column(VARCHAR, nullable=False)
     age: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    phone: Mapped[str | None] = mapped_column(VARCHAR(32), nullable=True)
     vulnerability: Mapped[VulnerabilityType | None] = mapped_column(
         vulnerability_type_pg, nullable=True
     )
