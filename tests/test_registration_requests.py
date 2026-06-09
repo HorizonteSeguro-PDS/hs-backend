@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy.exc import IntegrityError
 
 from dependencies.session import get_session
 from domain.auth.enums import Role
@@ -33,11 +34,13 @@ class _Session:
         requests=None,
         scalar_results=None,
         list_rows=None,
+        commit_error: bool = False,
     ):
         self.organizations = organizations or {}
         self.requests = requests or {}
         self.scalar_results = list(scalar_results or [])
         self.list_rows = list_rows or []
+        self.commit_error = commit_error
         self.added = []
         self.committed = False
         self.rolled_back = False
@@ -80,6 +83,8 @@ class _Session:
         pass
 
     def commit(self):
+        if self.commit_error:
+            raise IntegrityError("commit failed", None, None)
         self.committed = True
 
     def refresh(self, _obj):
@@ -128,6 +133,7 @@ def _registration_request(
     request_type: str = "existing_organization",
     organization_id: uuid.UUID | None = None,
     status: str = "pending",
+    roles: list[str] | None = None,
 ) -> RegistrationRequest:
     request = RegistrationRequest(
         status=status,
@@ -136,7 +142,7 @@ def _registration_request(
         email="carlos@horizonteseguro.app",
         phone="82999999999",
         password_hash="$bcrypt$fake",
-        roles=[Role.SHELTER_MANAGER.value],
+        roles=roles or [Role.SHELTER_MANAGER.value],
         organization_id=organization_id,
         new_organization_name=(
             "Nova Defesa Civil" if request_type == "new_organization" else None
@@ -303,6 +309,27 @@ class TestRegistrationRequests:
         assert response.status_code == 409
         assert response.json()["detail"] == "registration request already pending"
 
+    def test_existing_organization_request_commit_error_returns_409(self):
+        organization = _organization()
+        session = _Session(
+            organizations={organization.id: organization},
+            scalar_results=[None, None],
+            commit_error=True,
+        )
+        app.dependency_overrides[get_session] = _override(session)
+
+        with patch(
+            "controllers.registration_request.hash_password", return_value="$hashed"
+        ):
+            response = TestClient(app).post(
+                "/registration-requests/existing-organization",
+                json={**_EXISTING_PAYLOAD, "organization_id": str(organization.id)},
+            )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "registration request could not be created"
+        assert session.rolled_back is True
+
     def test_unknown_organization_returns_404(self):
         session = _Session()
         app.dependency_overrides[get_session] = _override(session)
@@ -313,6 +340,25 @@ class TestRegistrationRequests:
         )
 
         assert response.status_code == 404
+
+    def test_new_organization_request_commit_error_returns_409(self):
+        session = _Session(scalar_results=[None, None, None, None], commit_error=True)
+        app.dependency_overrides[get_session] = _override(session)
+
+        with patch(
+            "controllers.registration_request.hash_password", return_value="$hashed"
+        ):
+            response = TestClient(app).post(
+                "/registration-requests/new-organization",
+                json={
+                    **_EXISTING_PAYLOAD,
+                    "organization_name": "Nova Defesa Civil",
+                },
+            )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "registration request could not be created"
+        assert session.rolled_back is True
 
     def test_list_requires_authorized_role(self):
         session = _Session()
@@ -371,6 +417,32 @@ class TestRegistrationRequests:
         )
 
         assert response.status_code == 403
+
+    def test_crisis_manager_cannot_approve_crisis_manager_request(self):
+        organization = _organization()
+        request = _registration_request(
+            organization_id=organization.id,
+            roles=[Role.CRISIS_MANAGER.value],
+        )
+        session = _Session(
+            organizations={organization.id: organization},
+            requests={request.id: request},
+            scalar_results=[None],
+        )
+        app.dependency_overrides[get_session] = _override(session)
+
+        with patch(
+            "controllers.registration_request.send_registration_approved_email"
+        ) as send_email:
+            response = TestClient(app).post(
+                f"/registration-requests/{request.id}/approve",
+                headers=auth_headers("crisis_manager"),
+            )
+
+        assert response.status_code == 403
+        assert "cannot create" in response.json()["detail"]
+        assert not any(isinstance(obj, User) for obj in session.added)
+        send_email.assert_not_called()
 
     def test_approve_new_organization_creates_organization_and_user(self):
         request = _registration_request(request_type="new_organization")
