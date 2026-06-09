@@ -14,14 +14,20 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from domain.errors.http import ResourceAlreadyExists, ResourceNotFoundError
 from domain.inventory.schemas import (
+    InitialStockRequest,
+    InitialStockResponse,
     InventoryItemRead,
     InventoryMovementCreateRequest,
     InventoryMovementRead,
     InventoryMovementRecordedResponse,
+    ResourceCategoryRead,
 )
 from domain.models.inventory_item import InventoryItem
 from domain.models.inventory_movement import InventoryMovement
+from domain.models.resource_category import ResourceCategory
+from domain.models.shelter import Shelter
 from domain.schemas.enums import MovementDirection, MovementReason
 from repositories.inventory_item import InventoryItemRepository
 from repositories.inventory_movement import InventoryMovementRepository
@@ -127,6 +133,75 @@ class InventoryService:
         return InventoryMovementRecordedResponse(
             movement=InventoryMovementRead.model_validate(movement),
             inventory_after=item.quantity_current,
+        )
+
+    # --- WRITE: register_initial_stock --- #
+
+    def register_initial_stock(
+        self,
+        *,
+        shelter_id: UUID,
+        actor_id: UUID,
+        payload: InitialStockRequest,
+    ) -> InitialStockResponse:
+        """Cria ResourceCategory NOVA + abre o primeiro InventoryItem +
+        grava o primeiro IN movement, tudo dentro da mesma transação.
+
+        Pensado pra o "modal de entrada de recurso especial" do front,
+        onde o gestor registra um item que o sistema nunca viu antes.
+
+        Caller é responsável por commitar. Esse metodo apenas flusha.
+
+        Raises:
+          ResourceNotFoundError    — shelter inexistente.
+          ResourceAlreadyExists    — categoria com mesmo nome ja existe.
+        """
+        shelter = self.session.get(Shelter, shelter_id)
+        if shelter is None:
+            raise ResourceNotFoundError("shelter not found")
+
+        # 1) Garante que nao existe categoria com esse nome (unique constraint)
+        if self.categories.get_by_name(payload.category.name) is not None:
+            raise ResourceAlreadyExists(
+                f"resource category with name '{payload.category.name}' already exists"
+            )
+
+        # 2) Cria categoria
+        category = ResourceCategory(
+            name=payload.category.name,
+            unit=payload.category.unit,
+            lot_category=payload.category.lot_category,
+            description=payload.category.description,
+        )
+        self.session.add(category)
+        self.session.flush()
+
+        # 3) Delega pro record_movement (cria InventoryItem + Movement IN
+        # atomicamente, já lida com cache).
+        movement_result = self.record_movement(
+            shelter_id=shelter_id,
+            actor_id=actor_id,
+            payload=InventoryMovementCreateRequest(
+                category_id=category.id,
+                direction=MovementDirection.IN,
+                quantity=payload.quantity,
+                reason=MovementReason.DONATION,
+                source=payload.source,
+                notes=payload.notes,
+            ),
+        )
+
+        # 4) Pega o InventoryItem recem-criado pra devolver junto
+        item = self.items.get_for_shelter_category(
+            shelter_id=shelter_id, category_id=category.id
+        )
+        assert item is not None  # record_movement acabou de criar
+
+        return InitialStockResponse(
+            category=ResourceCategoryRead.model_validate(category),
+            item=InventoryItemRead.model_validate(item),
+            movement=movement_result.movement,
+            inventory_after=movement_result.inventory_after,
         )
 
     # --- READ: snapshot --- #

@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from dependencies.auth import CurrentUser, require_role
 from dependencies.session import get_session
 from domain.inventory.schemas import (
+    InitialStockRequest,
+    InitialStockResponse,
     InventoryItemRead,
     InventoryMovementCreateRequest,
     InventoryMovementRead,
@@ -69,7 +71,40 @@ def record_movement(
     session: _SessionDep,
     user: _AnyAuth,
 ) -> InventoryMovementRecordedResponse:
+    """Registra entrada ou saída de recurso EXISTENTE (modal 2).
+
+    `reason` é opcional: default `donation` se IN, `distribution` se OUT.
+    """
     result = InventoryService(session).record_movement(
+        shelter_id=shelter_id,
+        actor_id=user.id,
+        payload=payload,
+    )
+    session.commit()
+    return result
+
+
+@router.post(
+    "/{shelter_id}/inventory/initial-stock",
+    response_model=InitialStockResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={
+        404: {"description": "shelter not found"},
+        409: {"description": "resource category with that name already exists"},
+    },
+)
+def register_initial_stock(
+    shelter_id: UUID,
+    payload: InitialStockRequest,
+    session: _SessionDep,
+    user: _AnyAuth,
+) -> InitialStockResponse:
+    """Cria um TIPO de recurso novo + grava a primeira entrada (modal 1).
+
+    Atômico: se a criação da categoria ou o movement falhar, nada persiste.
+    Reason do movement é `donation` por default.
+    """
+    result = InventoryService(session).register_initial_stock(
         shelter_id=shelter_id,
         actor_id=user.id,
         payload=payload,

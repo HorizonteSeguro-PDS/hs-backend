@@ -204,7 +204,7 @@ def test_shelter_manager_without_org_sees_nothing():
 
 
 def _make_category(
-    *, name="alimento_nao_perecivel", lot=LotCategory.FOOD, unit=ResourceUnit.KG
+    *, name="alimento_nao_perecivel", lot=LotCategory.ESSENCIAIS, unit=ResourceUnit.KG
 ):
     return ResourceCategory(
         id=uuid.uuid4(),
@@ -273,9 +273,9 @@ def test_full_payload_shape_with_one_shelter():
     # 135/150 = 0.9 — bem acima do limiar 0.85 -> ALTA sem ambiguidade
     shelter = _shelter(capacity=150, occupation=135)
     crisis = _crisis(shelters=[shelter])
-    rice = _make_category(name="alimento_nao_perecivel", lot=LotCategory.FOOD)
+    rice = _make_category(name="alimento_nao_perecivel", lot=LotCategory.ESSENCIAIS)
     water = _make_category(
-        name="agua_potavel", lot=LotCategory.WATER, unit=ResourceUnit.L
+        name="agua_potavel", lot=LotCategory.ESSENCIAIS, unit=ResourceUnit.L
     )
 
     item_rice = _make_item(shelter.id, rice.id, current=300, maximum=1000)  # Low
@@ -315,14 +315,14 @@ def test_full_payload_shape_with_one_shelter():
     assert len(block.supplies) == 2
     rice_supply = next(s for s in block.supplies if s.name == "alimento_nao_perecivel")
     assert rice_supply.status is SupplyStatus.LOW  # 300/1000 = 0.3 -> LOW
-    assert rice_supply.lot_category is LotCategory.FOOD
+    assert rice_supply.lot_category is LotCategory.ESSENCIAIS
     assert rice_supply.max_capacity == 1000
 
     # resources
     assert len(block.resources) == 1
     res = block.resources[0]
     assert res.type is MovementDirection.IN
-    assert res.category is LotCategory.FOOD
+    assert res.category is LotCategory.ESSENCIAIS
     assert res.name == "alimento_nao_perecivel"
     assert res.destined_to is None
 

@@ -24,21 +24,32 @@ class ResourceUnit(str, Enum):
 
 class LotCategory(str, Enum):
     """Bucket grosseiro de tipo de recurso — categoria-pai das
-    ResourceCategory mais especificas (alimento_nao_perecivel pertence
-    a FOOD, cobertor pertence a BEDDING, etc).
+    ResourceCategory mais específicas. Combinado com o front em iteração.
 
-    Mirrors the `lot_category` Postgres enum defined in migration 0018.
+    Mirrors the `lot_category` Postgres enum (originalmente 9 valores na
+    0018, reduzido pra 6 valores mais focados na 0021).
+
+    Grupos e exemplos de itens:
+      ESSENCIAIS        — alimento, água potável, roupa, cobertor, colchão,
+                          kit higiene, kit limpeza
+      SAUDE             — medicamento, material médico, primeiros socorros,
+                          serviço de saúde, serviço psicológico
+      INFANTIL_E_IDOSOS — fralda infantil, fralda geriátrica, absorvente,
+                          brinquedo infantil
+      ANIMAIS           — ração animal, caixa de transporte, serviço
+                          veterinário
+      INFRAESTRUTURA    — lanterna, pilha/bateria, carregador, power bank,
+                          gerador, lona, tenda/barraca, botijão de gás
+      OPERACAO          — voluntário, transporte, equipamento de resgate,
+                          material de sinalização, doação financeira
     """
 
-    FOOD = "food"
-    WATER = "water"
-    MEDICINE = "medicine"
-    HYGIENE = "hygiene"
-    BEDDING = "bedding"
-    ANIMAL = "animal"
-    MONEY = "money"
-    CLOTHING = "clothing"
-    OTHER = "other"
+    ESSENCIAIS = "essenciais"
+    SAUDE = "saude"
+    INFANTIL_E_IDOSOS = "infantil_e_idosos"
+    ANIMAIS = "animais"
+    INFRAESTRUTURA = "infraestrutura"
+    OPERACAO = "operacao"
 
 
 class SupplyStatus(str, Enum):

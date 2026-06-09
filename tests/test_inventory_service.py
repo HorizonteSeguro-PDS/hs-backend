@@ -40,7 +40,7 @@ def _seed_category(session: Session, name: str = "cobertor") -> ResourceCategory
         id=uuid.uuid4(),
         name=name,
         unit=ResourceUnit.UNIDADE,
-        lot_category=LotCategory.BEDDING,
+        lot_category=LotCategory.ESSENCIAIS,
         description=None,
     )
     session.add(cat)

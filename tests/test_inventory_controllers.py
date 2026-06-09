@@ -41,7 +41,7 @@ class TestResourceCategoryController:
                         "id": category_id,
                         "name": "cobertor",
                         "unit": "unidade",
-                        "lot_category": "bedding",
+                        "lot_category": "essenciais",
                         "description": None,
                     }
                 ]
@@ -89,7 +89,7 @@ class TestResourceCategoryController:
             json={
                 "name": "agua",
                 "unit": "L",
-                "lot_category": "water",
+                "lot_category": "essenciais",
                 "description": None,
             },
             headers=auth_headers("crisis_manager"),

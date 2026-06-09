@@ -19,7 +19,7 @@ def _make_category(
         id=uuid.uuid4(),
         name=name,
         unit=unit,
-        lot_category=LotCategory.OTHER,
+        lot_category=LotCategory.OPERACAO,
         description=None,
     )
 
