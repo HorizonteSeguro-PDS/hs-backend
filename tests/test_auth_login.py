@@ -14,14 +14,14 @@ from main import app
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
-def _user(organization_id: uuid.UUID | None = None) -> User:
+def _user(organization_id: uuid.UUID | None = None, verified: bool = True) -> User:
     u = User(
         organization_id=organization_id,
         name="Test User",
         email="test@horizonteseguro.app",
         phone=None,
         password_hash="$bcrypt$fake",
-        verified=True,
+        verified=verified,
     )
     u.id = uuid.uuid4()
     u.created_at = _NOW
@@ -116,6 +116,22 @@ class TestLogin:
         )
         assert response.status_code == 401
         assert response.json()["detail"] == "invalid credentials"
+
+    @patch("controllers.auth.authenticate")
+    @patch("controllers.auth.create_access_token")
+    def test_unverified_user_returns_401_without_token(self, mint, mock_auth):
+        user = _user(verified=False)
+        mock_auth.return_value = (user, [Role.SHELTER_MANAGER])
+        app.dependency_overrides[get_session] = _session()
+
+        response = TestClient(app).post(
+            "/auth/login",
+            json={"email": "test@horizonteseguro.app", "password": "supersecret-1234"},
+        )
+
+        assert response.status_code == 401
+        assert response.json()["detail"] == "invalid credentials"
+        mint.assert_not_called()
 
     def test_invalid_email_format_returns_422(self):
         app.dependency_overrides[get_session] = _session()
