@@ -24,7 +24,7 @@ the seeded rows first.
 import argparse
 import sys
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -168,7 +168,6 @@ DEMO_FULL_SHELTER_NAME = "Ginásio Poliesportivo Municipal"
 
 SHELTERS_SPEC = [
     {
-        "id": DEMO_FULL_SHELTER_ID,
         "organization_id": None,
         "responsible_user_id": None,
         "created_by": None,
@@ -207,6 +206,7 @@ SHELTERS_SPEC = [
         "verified": True,
     },
     {
+        "id": DEMO_FULL_SHELTER_ID,
         "organization_id": None,
         "responsible_user_id": None,
         "created_by": None,
@@ -582,6 +582,7 @@ def seed_demo_full_shelter(
         )
         if beneficiary is None:
             beneficiary = Beneficiary(
+                id=uuid4(),
                 user_id=None,
                 cpf=spec["cpf"],
                 name=spec["name"],
@@ -596,12 +597,14 @@ def seed_demo_full_shelter(
         open_stay = session.scalar(
             select(ShelterStay).where(
                 ShelterStay.beneficiary_id == beneficiary.id,
+                ShelterStay.shelter_id == shelter.id,
                 ShelterStay.checked_out_at.is_(None),
             )
         )
         if open_stay is None:
             session.add(
                 ShelterStay(
+                    id=uuid4(),
                     beneficiary_id=beneficiary.id,
                     shelter_id=shelter.id,
                 )
